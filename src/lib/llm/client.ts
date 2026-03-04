@@ -2,20 +2,17 @@
  * Thin OpenAI client for server-side LLM calls.
  * Reads OPENAI_API_KEY from env; do not expose to client.
  */
-import "server-only"
-/**
- * Thin OpenAI client for server-side LLM calls.
- * Reads OPENAI_API_KEY from env; do not expose to client.
- */
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+import "server-only";
 
 export function hasOpenAiKey(): boolean {
-  return Boolean(OPENAI_API_KEY && OPENAI_API_KEY.trim().length > 0);
+  const key = process.env.OPENAI_API_KEY;
+  return Boolean(key && key.trim().length > 0);
 }
 
 export function getOpenAiKey(): string | null {
-  return OPENAI_API_KEY?.trim() ?? null;
+  const key = process.env.OPENAI_API_KEY;
+  return key?.trim() ?? null;
 }
 
 export async function chatCompletion(params: {
@@ -23,11 +20,15 @@ export async function chatCompletion(params: {
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
   responseFormat?: { type: "json_object" };
 }): Promise<{ content: string } | { error: string }> {
+
   const key = getOpenAiKey();
+
   if (!key) {
+    console.error("OPENAI_API_KEY missing from environment");
+
     return {
       error:
-        "OPENAI_API_KEY is not set. Add it in Amplify environment variables or in .env.local for local development.",
+        "OPENAI_API_KEY is not set. Add it in Amplify environment variables or .env.local for local development.",
     };
   }
 
@@ -35,6 +36,7 @@ export async function chatCompletion(params: {
     model: params.model,
     messages: params.messages,
   };
+
   if (params.responseFormat) {
     body.response_format = params.responseFormat;
   }
@@ -50,15 +52,22 @@ export async function chatCompletion(params: {
 
   if (!res.ok) {
     const text = await res.text();
-    return { error: `OpenAI API error (${res.status}): ${text.slice(0, 500)}` };
+    console.error("OpenAI API error:", text);
+
+    return {
+      error: `OpenAI API error (${res.status}): ${text.slice(0, 500)}`,
+    };
   }
 
   const data = (await res.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
   };
+
   const content = data.choices?.[0]?.message?.content?.trim();
-  if (content == null) {
+
+  if (!content) {
     return { error: "Empty response from OpenAI" };
   }
+
   return { content };
 }
