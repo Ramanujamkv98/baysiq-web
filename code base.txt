@@ -1,0 +1,39 @@
+baysiq/
+  apps/
+    web/
+      app/                        # Next.js App Router pages
+        page.tsx                  # landing / upload
+        dashboard/
+          page.tsx                # dashboard shell with tabs
+      components/
+        upload/
+        dashboard/
+        charts/
+        ui/                       # shadcn components
+      lib/
+        api.ts                    # client API helpers
+        format.ts                 # formatting utils
+      styles/
+
+  packages/
+    core/
+      src/
+        schema.ts                 # required columns + types
+        validate.ts               # validate + normalize columns
+        parse.ts                  # CSV parsing helpers (if shared)
+        costs.ts                  # profit calculation
+        cohorts.ts                # cohort tables
+        archetypes.ts             # pattern extraction
+        ltv.ts                    # LTV metrics
+        summarize.ts              # build “prompt payloads”
+      tests/
+
+    llm/
+      src/
+        client.ts                 # OpenAI client wrapper
+        prompts/
+          archetypeLabel.ts
+          dashboardSummary.ts
+
+  api/
+    route-handlers/               # optional if you want separate service later
