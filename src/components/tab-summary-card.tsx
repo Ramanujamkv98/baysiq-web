@@ -1,40 +1,62 @@
 "use client";
 
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import type { LlmSummaryResult } from "@/lib/types";
 import { SummaryCard } from "./summary-card";
 
-type SummaryCardProps = {
+type TabSummaryCardProps = {
   tab: string;
   metrics: Record<string, unknown>;
 };
 
-export function TabSummaryCard({ tab, metrics }: SummaryCardProps) {
+export function TabSummaryCard({ tab, metrics }: TabSummaryCardProps) {
   const [result, setResult] = useState<LlmSummaryResult | null>(null);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
   const generate = async () => {
+    if (!tab) {
+      toast({
+        title: "Error",
+        description: "Missing tab context",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
-    setResult(null);
+
     try {
       const res = await fetch("/api/llm/summary", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tab, metrics }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          tab,
+          metrics: metrics ?? {},
+        }),
       });
+
       const data = await res.json();
+
       if (!res.ok) {
-        toast({ title: "Error", description: data?.error ?? "Failed to generate summary", variant: "destructive" });
+        toast({
+          title: "Summary generation failed",
+          description: data?.error ?? "Unknown error",
+          variant: "destructive",
+        });
         return;
       }
+
       setResult(data);
-    } catch (e) {
-      toast({ title: "Error", description: e instanceof Error ? e.message : "Request failed", variant: "destructive" });
+    } catch (err) {
+      toast({
+        title: "Network error",
+        description: err instanceof Error ? err.message : "Request failed",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
