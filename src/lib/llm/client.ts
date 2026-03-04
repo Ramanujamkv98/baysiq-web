@@ -1,18 +1,18 @@
-/**
- * Thin OpenAI client for server-side LLM calls.
- * Reads OPENAI_API_KEY from env; do not expose to client.
- */
-
 import "server-only";
-
-export function hasOpenAiKey(): boolean {
-  const key = process.env.OPENAI_API_KEY;
-  return Boolean(key && key.trim().length > 0);
-}
 
 export function getOpenAiKey(): string | null {
   const key = process.env.OPENAI_API_KEY;
-  return key?.trim() ?? null;
+
+  if (!key) {
+    console.error("OPENAI_API_KEY missing from runtime environment");
+    return null;
+  }
+
+  return key.trim();
+}
+
+export function hasOpenAiKey(): boolean {
+  return Boolean(process.env.OPENAI_API_KEY);
 }
 
 export async function chatCompletion(params: {
@@ -24,11 +24,8 @@ export async function chatCompletion(params: {
   const key = getOpenAiKey();
 
   if (!key) {
-    console.error("OPENAI_API_KEY missing from environment");
-
     return {
-      error:
-        "OPENAI_API_KEY is not set. Add it in Amplify environment variables or .env.local for local development.",
+      error: "OPENAI_API_KEY missing from runtime",
     };
   }
 
@@ -52,18 +49,13 @@ export async function chatCompletion(params: {
 
   if (!res.ok) {
     const text = await res.text();
-    console.error("OpenAI API error:", text);
-
-    return {
-      error: `OpenAI API error (${res.status}): ${text.slice(0, 500)}`,
-    };
+    return { error: `OpenAI API error (${res.status}): ${text}` };
   }
 
-  const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
+  const data = await res.json();
 
-  const content = data.choices?.[0]?.message?.content?.trim();
+  const content =
+    data?.choices?.[0]?.message?.content?.trim();
 
   if (!content) {
     return { error: "Empty response from OpenAI" };
