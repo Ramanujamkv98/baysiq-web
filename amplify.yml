@@ -3,9 +3,10 @@ frontend:
   phases:
     preBuild:
       commands:
-        - npm ci
+        - npm install
     build:
       commands:
+        - export OPENAI_API_KEY=$OPENAI_API_KEY
         - npm run build
   artifacts:
     baseDirectory: .next
@@ -14,9 +15,3 @@ frontend:
   cache:
     paths:
       - node_modules/**/*
-      - .next/cache/**/*
-  customHeaders:
-    - pattern: '**'
-      headers:
-        - key: 'Cache-Control'
-          value: 'no-cache, no-store, must-revalidate'
