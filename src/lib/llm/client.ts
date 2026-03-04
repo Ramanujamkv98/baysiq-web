@@ -2,6 +2,11 @@
  * Thin OpenAI client for server-side LLM calls.
  * Reads OPENAI_API_KEY from env; do not expose to client.
  */
+import "server-only"
+/**
+ * Thin OpenAI client for server-side LLM calls.
+ * Reads OPENAI_API_KEY from env; do not expose to client.
+ */
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
