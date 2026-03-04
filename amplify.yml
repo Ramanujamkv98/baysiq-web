@@ -6,7 +6,8 @@ frontend:
         - npm install
     build:
       commands:
-        - export OPENAI_API_KEY=$OPENAI_API_KEY
+        # Make Amplify env/secrets visible to Next.js server (build + runtime)
+        - env | grep -e OPENAI_API_KEY >> .env.production || true
         - npm run build
   artifacts:
     baseDirectory: .next
