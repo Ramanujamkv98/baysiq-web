@@ -11,28 +11,28 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   if (!hasOpenAiKey()) {
     return NextResponse.json(
-      {
-        error:
-          "OPENAI_API_KEY is not set. Add it in Amplify environment variables or in .env.local for local development.",
-      },
-      { status: 503 }
+      { error: "Server misconfiguration: OpenAI key missing." },
+      { status: 500 }
     );
   }
 
   try {
     const body = await request.json();
-    const tab = typeof body?.tab === "string" ? body.tab : "";
-    const metrics = body?.metrics && typeof body.metrics === "object" ? body.metrics : {};
+
+    const tab = typeof body?.tab === "string" ? body.tab : null;
+    const metrics =
+      body?.metrics && typeof body.metrics === "object" ? body.metrics : {};
 
     if (!tab) {
       return NextResponse.json(
-        { error: "Request body must include { tab: string, metrics?: object }" },
+        { error: "Invalid request: { tab: string, metrics?: object } required." },
         { status: 400 }
       );
     }
 
     const prompt = summaryUserPrompt(tab, metrics);
-    const response = await chatCompletion({
+
+    const llmResponse = await chatCompletion({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: SUMMARY_SYSTEM },
@@ -41,21 +41,28 @@ export async function POST(request: Request) {
       responseFormat: { type: "json_object" },
     });
 
-    if ("error" in response) {
-      return NextResponse.json({ error: response.error }, { status: 502 });
+    if ("error" in llmResponse) {
+      return NextResponse.json(
+        { error: "LLM request failed." },
+        { status: 502 }
+      );
     }
 
-    const parsed = parseSummaryResponse(response.content);
+    const parsed = parseSummaryResponse(llmResponse.content);
+
     if (!parsed) {
       return NextResponse.json(
-        { error: "LLM returned invalid JSON for summary" },
+        { error: "Invalid response format from LLM." },
         { status: 502 }
       );
     }
 
     return NextResponse.json(parsed);
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "LLM request failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (err) {
+    console.error("Summary API error:", err);
+    return NextResponse.json(
+      { error: "Internal server error." },
+      { status: 500 }
+    );
   }
 }
