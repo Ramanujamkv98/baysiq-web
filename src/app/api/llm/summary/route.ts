@@ -9,9 +9,17 @@ import {
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  // Debug check to verify Amplify injected the key
+  console.log("OPENAI KEY EXISTS:", !!process.env.OPENAI_API_KEY);
+
   if (!hasOpenAiKey()) {
+    console.error("OpenAI API key missing in environment.");
+
     return NextResponse.json(
-      { error: "Server misconfiguration: OpenAI key missing." },
+      {
+        error:
+          "Server misconfiguration: OpenAI API key is missing. Check Amplify environment variables.",
+      },
       { status: 500 }
     );
   }
@@ -25,7 +33,9 @@ export async function POST(request: Request) {
 
     if (!tab) {
       return NextResponse.json(
-        { error: "Invalid request: { tab: string, metrics?: object } required." },
+        {
+          error: "Invalid request. Expected: { tab: string, metrics?: object }",
+        },
         { status: 400 }
       );
     }
@@ -42,8 +52,10 @@ export async function POST(request: Request) {
     });
 
     if ("error" in llmResponse) {
+      console.error("OpenAI request failed:", llmResponse.error);
+
       return NextResponse.json(
-        { error: "LLM request failed." },
+        { error: "LLM request failed. Check server logs." },
         { status: 502 }
       );
     }
@@ -51,6 +63,8 @@ export async function POST(request: Request) {
     const parsed = parseSummaryResponse(llmResponse.content);
 
     if (!parsed) {
+      console.error("Failed to parse LLM response:", llmResponse.content);
+
       return NextResponse.json(
         { error: "Invalid response format from LLM." },
         { status: 502 }
@@ -60,6 +74,7 @@ export async function POST(request: Request) {
     return NextResponse.json(parsed);
   } catch (err) {
     console.error("Summary API error:", err);
+
     return NextResponse.json(
       { error: "Internal server error." },
       { status: 500 }
