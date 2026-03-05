@@ -60,11 +60,11 @@ export type CohortProfitLtvRow = {
  * Later steps may add LTV metrics and AI labeling
  */
 export type Archetype = {
-  /** Stable identifier for React keys and LLM caching */
-  key: string; // e.g. "Vitamin C Serum|Retinol Cream"
+  /** Stable identifier for React keys + later caching */
+  key: string; // e.g. "Vitamin C Serum|Retinol Cream" (sorted)
 
   /** Products involved in the archetype */
-  items: string[];
+  items: string[]; // Step 1: typically length 2
 
   /** Number of unique customers exhibiting this pattern */
   customers: number;
