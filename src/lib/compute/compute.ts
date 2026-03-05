@@ -262,13 +262,11 @@ function computeArchetypes(
   const archetypeList: Archetype[] = [];
   for (const [key, { customers: set, profit: totalProfit }] of pairCount) {
     const items = key.split("|").filter(Boolean);
-    if (items.length === 0) continue;
-    archetypeList.push({
-      items,
-      customers: set.size,
-      profitLtv: set.size > 0 ? totalProfit / set.size : 0,
-    });
-  }
-  archetypeList.sort((a, b) => b.customers - a.customers);
-  return archetypeList.slice(0, 20);
-}
+if (items.length === 0) continue;
+
+archetypeList.push({
+  key, // ✅ add this
+  items,
+  customers: set.size,
+  profitLtv: set.size > 0 ? totalProfit / set.size : 0,
+});
