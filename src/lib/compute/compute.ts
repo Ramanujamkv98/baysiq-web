@@ -1,3 +1,5 @@
+// src/lib/compute/compute.ts
+
 import type {
   CostInputs,
   OrderRow,
@@ -10,7 +12,7 @@ import { parseCsv } from "./parse-csv";
 import { costInputsSchema } from "./validate-csv";
 
 function toOrderMonth(dateStr: string): string {
-  const trimmed = dateStr.trim();
+  const trimmed = (dateStr ?? "").trim();
   if (!trimmed) return "";
   const d = new Date(trimmed);
   if (Number.isNaN(d.getTime())) return "";
@@ -60,6 +62,7 @@ export function compute(input: ComputeInput): ComputeResult | { error: string } 
   const cogsMult = costs.cogsPct / 100;
   const processingMult = costs.paymentProcessingPct / 100;
 
+  // earliest cohort month per customer
   const customerFirstOrder: Map<string, string> = new Map();
   for (const r of rows) {
     const cid = String(r.customer_id ?? "").trim();
@@ -79,14 +82,16 @@ export function compute(input: ComputeInput): ComputeResult | { error: string } 
     const order_date = String(r.order_date ?? "").trim();
     const order_month = toOrderMonth(order_date);
     if (!customer_id || !order_month) {
-      // Skip malformed or incomplete rows for cohort/archetype logic
+      // Skip malformed/incomplete rows for cohort/archetype logic
       continue;
     }
 
     const gross = Number(r.gross_revenue) || 0;
     const discount = Number(r.discount) || 0;
     const refund = Number(r.refund) || 0;
+
     const net_revenue = gross - discount - refund;
+
     const order_profit =
       net_revenue -
       cogsMult * net_revenue -
@@ -121,24 +126,30 @@ export function compute(input: ComputeInput): ComputeResult | { error: string } 
   const revenue = orderRows.reduce((s, o) => s + o.net_revenue, 0);
   const profit = orderRows.reduce((s, o) => s + o.order_profit, 0);
 
+  // repeat purchase rate
   const customersWithRepeat = new Set(
     orderRows
-      .filter((_, i, arr) =>
+      .filter((row, i, arr) =>
         arr.some(
           (x, j) =>
-            j !== i && x.customer_id === _.customer_id && x.order_id !== _.order_id
+            j !== i &&
+            x.customer_id === row.customer_id &&
+            x.order_id !== row.order_id
         )
       )
       .map((o) => o.customer_id)
   ).size;
+
   const repeatPurchaseRate =
     customers > 0 ? (customersWithRepeat / customers) * 100 : 0;
 
+  // cohort sizes
   const cohortSizes = new Map<string, number>();
-  for (const [cid, cm] of customerFirstOrder) {
+  for (const [, cm] of customerFirstOrder) {
     if (cm) cohortSizes.set(cm, (cohortSizes.get(cm) ?? 0) + 1);
   }
 
+  // retention map: cohortMonth -> monthIndex -> set(customers)
   const retentionMap = new Map<string, Map<number, Set<string>>>();
   for (const o of orderRows) {
     if (!o.cohort_month) continue;
@@ -160,9 +171,11 @@ export function compute(input: ComputeInput): ComputeResult | { error: string } 
     orderRows.length > 0
       ? Math.max(0, ...orderRows.map((o) => o.month_index))
       : 0;
+
   for (const [cohortMonth, byIndex] of retentionMap) {
     const cohortSize = cohortSizes.get(cohortMonth) ?? 0;
     if (cohortSize === 0) continue;
+
     for (let mi = 0; mi <= maxMonthIndex; mi++) {
       const active = byIndex.get(mi)?.size ?? 0;
       cohortRetention.push({
@@ -175,6 +188,7 @@ export function compute(input: ComputeInput): ComputeResult | { error: string } 
     }
   }
 
+  // profit LTV by cohort
   const profitByCohort = new Map<string, number>();
   for (const o of orderRows) {
     profitByCohort.set(
@@ -199,23 +213,27 @@ export function compute(input: ComputeInput): ComputeResult | { error: string } 
     profitLtv: r.profitLtv,
   }));
 
+  // archetypes
   const rawArchetypes = computeArchetypes(orderRows, customerFirstOrder);
 
-  // Defensive: ensure archetypes array never contains undefined or malformed entries.
+  // Ensure output matches Archetype[] shape (esp. required `key`)
   const archetypes: Archetype[] = rawArchetypes
     .filter(
       (a): a is Archetype =>
         Boolean(a) &&
-        typeof a.customers === "number" &&
-        Array.isArray(a.items)
+        typeof (a as any).key === "string" &&
+        Array.isArray(a.items) &&
+        typeof a.customers === "number"
     )
     .map((a) => ({
-      items: a.items ?? [],
+      key: String((a as any).key ?? a.items?.join("|") ?? ""),
+      items: Array.isArray(a.items) ? a.items : [],
       customers: Number.isFinite(a.customers) ? a.customers : 0,
       profitLtv: Number.isFinite(a.profitLtv) ? a.profitLtv : 0,
-      name: a.name,
-      description: a.description,
-    }));
+      name: (a as any).name,
+      description: (a as any).description,
+    }))
+    .filter((a) => a.key.length > 0);
 
   return {
     kpis: {
@@ -236,6 +254,7 @@ function computeArchetypes(
   orderRows: OrderRow[],
   customerFirstOrder: Map<string, string>
 ): Archetype[] {
+  // Convert cohort month (YYYY-MM) into a timestamp representing the 1st day of that month.
   const firstOrderDateByCustomer = new Map<string, number>();
   for (const [cid, monthStr] of customerFirstOrder) {
     if (!monthStr) continue;
@@ -246,8 +265,6 @@ function computeArchetypes(
     firstOrderDateByCustomer.set(cid, new Date(y, m - 1, 1).getTime());
   }
 
-  const first30DaysProductsByCustomer = new Map<string, string[]>();
-
   const byCustomerOrder: Map<string, OrderRow[]> = new Map();
   for (const o of orderRows) {
     const cid = o.customer_id;
@@ -257,26 +274,34 @@ function computeArchetypes(
     byCustomerOrder.set(cid, list);
   }
 
+  // Products purchased in the first 30 days (from cohort start month)
+  const first30DaysProductsByCustomer = new Map<string, string[]>();
   for (const [cid, list] of byCustomerOrder) {
     const firstTs = firstOrderDateByCustomer.get(cid);
     if (firstTs == null) continue;
+
     const cutoff = firstTs + 30 * 24 * 60 * 60 * 1000;
+
     const inWindow = list
       .filter((o) => {
         const t = new Date(o.order_date).getTime();
         return Number.isFinite(t) && t >= firstTs && t <= cutoff;
       })
-      .map((o) => o.product_name.trim() || o.product_id)
-      .filter((v) => Boolean(v));
+      .map((o) => {
+        const pn = (o.product_name ? o.product_name.trim() : "") || "";
+        const pid = (o.product_id ?? "").trim();
+        return pn || pid;
+      })
+      .filter(Boolean);
+
     const uniq = [...new Set(inWindow)];
     if (uniq.length >= 1) {
       first30DaysProductsByCustomer.set(cid, uniq);
     }
   }
 
-  const pairCount = new Map<string, { customers: Set<string>; profit: number }>();
+  // Sum profit by customer (for profitLtv per archetype)
   const customerProfitLtv = new Map<string, number>();
-
   for (const o of orderRows) {
     if (!o.customer_id) continue;
     customerProfitLtv.set(
@@ -285,27 +310,36 @@ function computeArchetypes(
     );
   }
 
+  // Group customers by the set of products they bought in first 30 days
+  const groupMap = new Map<string, { customers: Set<string>; profit: number }>();
+
   for (const [cid, products] of first30DaysProductsByCustomer) {
     if (!products || products.length === 0) continue;
+
     const key = [...products].sort().join("|");
     const profit = customerProfitLtv.get(cid) ?? 0;
-    const existing = pairCount.get(key);
+
+    const existing = groupMap.get(key);
     if (existing) {
       existing.customers.add(cid);
       existing.profit += profit;
     } else {
-      pairCount.set(key, { customers: new Set([cid]), profit });
+      groupMap.set(key, { customers: new Set([cid]), profit });
     }
   }
 
   const archetypeList: Archetype[] = [];
-  for (const [key, value] of pairCount) {
+  for (const [key, value] of groupMap) {
     if (!value) continue;
+
     const { customers: set, profit: totalProfit } = value;
     const items = key.split("|").filter(Boolean);
     if (items.length === 0) continue;
+
     const customerCount = set.size;
+
     archetypeList.push({
+      key, // ✅ required by Archetype
       items,
       customers: customerCount,
       profitLtv: customerCount > 0 ? totalProfit / customerCount : 0,
