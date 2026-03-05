@@ -1,14 +1,17 @@
 // src/lib/compute/compute.ts
 
 /**
- * Minimal MVP compute module.
- * - Exports `compute` as a named export (fixes your build failure).
+ * Minimal MVP compute module (updated)
+ * - Exports `compute` as a named export.
  * - Parses a CSV text payload.
  * - Computes per-order profit using provided costs.
- * - Produces a few summary metrics + top archetypes.
+ * - Produces summary metrics + top archetypes.
  *
- * NOTE: This file intentionally avoids importing app-specific types (OrderRow/Archetype)
- * to prevent build breaks if your types file doesn't export them.
+ * Key update:
+ * - ONLY requires truly minimal columns:
+ *   order_id, customer_id, order_date, gross_revenue
+ * - Treats discount/refund/product_id/product_name as OPTIONAL with safe defaults.
+ * - Avoids returning errors for common real-world CSVs that omit refund/product_id/etc.
  */
 
 export type CostInputs = {
@@ -27,11 +30,15 @@ type OrderRow = {
   order_id: string;
   customer_id: string;
   order_date: string;
+
+  // optional in CSV, but present in normalized rows:
   product_id: string;
   product_name: string;
+
   gross_revenue: number;
   discount: number;
   refund: number;
+
   // computed:
   order_profit: number;
 };
@@ -59,7 +66,7 @@ type ComputeOk = {
 type ComputeErr = { error: string };
 
 function toOrderMonth(dateStr: string): string {
-  const d = new Date(dateStr.trim());
+  const d = new Date((dateStr ?? "").trim());
   if (Number.isNaN(d.getTime())) return "";
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -143,38 +150,34 @@ function computeOrderProfit(
   return netRevenue - cogs - shipping - processing - fixedFee;
 }
 
-function computeArchetypes(orderRows: OrderRow[], customerFirstOrder: Map<string, string>): Archetype[] {
+function computeArchetypes(orderRows: OrderRow[], customerFirstOrderMonth: Map<string, string>): Archetype[] {
   // Convert cohort month (YYYY-MM) into a timestamp representing the 1st day of that month.
-  // NOTE: Approximation if CSV has day-level first orders, but works for MVP.
-  const firstOrderDateByCustomer = new Map<string, number>();
-  for (const [cid, monthStr] of customerFirstOrder) {
+  const firstOrderTsByCustomer = new Map<string, number>();
+  for (const [cid, monthStr] of customerFirstOrderMonth) {
     const [y, m] = monthStr.split("-").map(Number);
     if (!y || !m) continue;
-    firstOrderDateByCustomer.set(cid, new Date(y, m - 1, 1).getTime());
+    firstOrderTsByCustomer.set(cid, new Date(y, m - 1, 1).getTime());
   }
 
   // Group orders by customer
-  const byCustomerOrder: Map<string, OrderRow[]> = new Map();
+  const byCustomer: Map<string, OrderRow[]> = new Map();
   for (const o of orderRows) {
-    const list = byCustomerOrder.get(o.customer_id) ?? [];
+    const list = byCustomer.get(o.customer_id) ?? [];
     list.push(o);
-    byCustomerOrder.set(o.customer_id, list);
+    byCustomer.set(o.customer_id, list);
   }
 
-  // Customer total profit (for optional profitLtv per archetype)
+  // Customer total profit
   const customerProfitTotal = new Map<string, number>();
   for (const o of orderRows) {
-    customerProfitTotal.set(
-      o.customer_id,
-      (customerProfitTotal.get(o.customer_id) ?? 0) + o.order_profit
-    );
+    customerProfitTotal.set(o.customer_id, (customerProfitTotal.get(o.customer_id) ?? 0) + o.order_profit);
   }
 
   // pairKey -> { customers:Set, totalProfit:number }
   const pairCount = new Map<string, { customers: Set<string>; profit: number }>();
 
-  for (const [cid, list] of byCustomerOrder) {
-    const firstTs = firstOrderDateByCustomer.get(cid);
+  for (const [cid, list] of byCustomer) {
+    const firstTs = firstOrderTsByCustomer.get(cid);
     if (firstTs == null) continue;
 
     const cutoff = firstTs + 30 * 24 * 60 * 60 * 1000;
@@ -185,13 +188,13 @@ function computeArchetypes(orderRows: OrderRow[], customerFirstOrder: Map<string
         const t = new Date(o.order_date).getTime();
         return Number.isFinite(t) && t >= firstTs && t <= cutoff;
       })
-      .map((o) => (o.product_name?.trim() ? o.product_name.trim() : o.product_id))
+      .map((o) => (o.product_name?.trim() ? o.product_name.trim() : o.product_id || "Unknown Product"))
       .filter(Boolean);
 
     const uniq = Array.from(new Set(productsInWindow));
     if (uniq.length < 2) continue;
 
-    // Generate ALL pairs from the unique product set
+    // Generate all pairs from the unique product set
     for (let i = 0; i < uniq.length; i++) {
       for (let j = i + 1; j < uniq.length; j++) {
         const a = uniq[i];
@@ -211,15 +214,15 @@ function computeArchetypes(orderRows: OrderRow[], customerFirstOrder: Map<string
   }
 
   const archetypeList: Archetype[] = [];
-  for (const [key, { customers: set, profit: totalProfit }] of pairCount) {
+  for (const [key, { customers, profit: totalProfit }] of pairCount) {
     const items = key.split("|").filter(Boolean);
-    if (items.length === 0) continue;
+    if (!items.length) continue;
 
     archetypeList.push({
       key,
       items,
-      customers: set.size,
-      profitLtv: set.size > 0 ? totalProfit / set.size : 0,
+      customers: customers.size,
+      profitLtv: customers.size > 0 ? totalProfit / customers.size : 0,
     });
   }
 
@@ -241,27 +244,40 @@ export function compute(input: ComputeInput): ComputeOk | ComputeErr {
   const parsed = parseCsv(csvText);
   if ("error" in parsed) return parsed;
 
-  // These are the columns we can use. If your CSV uses different names, update here.
-  // This keeps your pipeline from silently producing garbage.
-  const required = ["order_id", "customer_id", "order_date", "product_id", "product_name", "gross_revenue", "discount", "refund"];
+  // ✅ Minimal required columns for MVP
+  const required = ["order_id", "customer_id", "order_date", "gross_revenue"];
   for (const col of required) {
     if (!parsed.headers.includes(col)) {
       return { error: `Missing required column: ${col}` };
     }
   }
 
+  // Optional columns
+  const hasDiscount = parsed.headers.includes("discount");
+  const hasRefund = parsed.headers.includes("refund");
+  const hasProductId = parsed.headers.includes("product_id");
+  const hasProductName = parsed.headers.includes("product_name");
+
   const orders: OrderRow[] = parsed.rows.map((r) => {
     const gross = num(r["gross_revenue"]);
-    const disc = num(r["discount"]);
-    const ref = num(r["refund"]);
+    const disc = hasDiscount ? num(r["discount"]) : 0;
+    const ref = hasRefund ? num(r["refund"]) : 0;
+
+    const product_id = hasProductId ? (r["product_id"] ?? "").trim() : "";
+    const product_name = hasProductName
+      ? (r["product_name"] ?? "").trim()
+      : product_id || "Unknown Product";
+
     const profit = computeOrderProfit(gross, disc, ref, costs);
 
     return {
-      order_id: r["order_id"] ?? "",
-      customer_id: r["customer_id"] ?? "",
-      order_date: r["order_date"] ?? "",
-      product_id: r["product_id"] ?? "",
-      product_name: r["product_name"] ?? "",
+      order_id: (r["order_id"] ?? "").trim(),
+      customer_id: (r["customer_id"] ?? "").trim(),
+      order_date: (r["order_date"] ?? "").trim(),
+
+      product_id,
+      product_name,
+
       gross_revenue: gross,
       discount: disc,
       refund: ref,
@@ -269,7 +285,7 @@ export function compute(input: ComputeInput): ComputeOk | ComputeErr {
     };
   });
 
-  // first order month per customer
+  // first order month per customer (based on earliest month)
   const firstOrderMonth = new Map<string, string>();
   for (const o of orders) {
     if (!o.customer_id) continue;
@@ -277,12 +293,8 @@ export function compute(input: ComputeInput): ComputeOk | ComputeErr {
     if (!month) continue;
 
     const existing = firstOrderMonth.get(o.customer_id);
-    if (!existing) {
-      firstOrderMonth.set(o.customer_id, month);
-    } else {
-      // keep earliest month
-      firstOrderMonth.set(o.customer_id, existing < month ? existing : month);
-    }
+    if (!existing) firstOrderMonth.set(o.customer_id, month);
+    else firstOrderMonth.set(o.customer_id, existing < month ? existing : month);
   }
 
   const archetypes = computeArchetypes(orders, firstOrderMonth);
