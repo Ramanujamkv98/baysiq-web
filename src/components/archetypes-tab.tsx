@@ -12,12 +12,21 @@ type ArchetypesTabProps = {
   data: ComputeResult;
 };
 
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
 export function ArchetypesTab({ data }: ArchetypesTabProps) {
   const [archetypes, setArchetypes] = useState<ArchetypeType[]>(data.archetypes);
 
   useEffect(() => {
     setArchetypes(data.archetypes);
   }, [data.archetypes]);
+
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
@@ -29,7 +38,9 @@ export function ArchetypesTab({ data }: ArchetypesTabProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ patterns: archetypes }),
       });
+
       const json = await res.json();
+
       if (!res.ok) {
         toast({
           title: "Error",
@@ -38,7 +49,13 @@ export function ArchetypesTab({ data }: ArchetypesTabProps) {
         });
         return;
       }
-      const labeled = json.archetypes as Array<{ name: string; description: string; items: string[] }>;
+
+      const labeled = json.archetypes as Array<{
+        name: string;
+        description: string;
+        items: string[];
+      }>;
+
       if (Array.isArray(labeled)) {
         setArchetypes((prev) =>
           prev.map((p, i) => {
@@ -71,11 +88,7 @@ export function ArchetypesTab({ data }: ArchetypesTabProps) {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="space-y-6"
-    >
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       <TabSummaryCard tab="Archetypes" metrics={metrics} />
 
       <Card>
@@ -90,29 +103,23 @@ export function ArchetypesTab({ data }: ArchetypesTabProps) {
             {loading ? "Labeling…" : "Label with AI"}
           </Button>
         </CardHeader>
+
         <CardContent>
           <div className="space-y-4">
             {archetypes.length === 0 ? (
               <p className="text-sm text-muted-foreground">No archetypes detected.</p>
             ) : (
-              archetypes.map((a, i) => (
-                <div
-                  key={i}
-                  className="rounded-lg border p-4 space-y-1"
-                >
-                  <div className="font-medium">
-                    {a.name ?? a.items.join(" + ")}
-                  </div>
+              archetypes.map((a) => (
+                <div key={a.key} className="rounded-lg border p-4 space-y-1">
+                  <div className="font-medium">{a.name ?? a.items.join(" + ")}</div>
+
                   {a.description && (
                     <p className="text-sm text-muted-foreground">{a.description}</p>
                   )}
+
                   <p className="text-xs text-muted-foreground">
                     Items: {a.items.join(", ")} · Customers: {a.customers} · Profit LTV:{" "}
-                    {new Intl.NumberFormat("en-US", {
-                      style: "currency",
-                      currency: "USD",
-                      maximumFractionDigits: 0,
-                    }).format(a.profitLtv)}
+                    {typeof a.profitLtv === "number" ? formatCurrency(a.profitLtv) : "—"}
                   </p>
                 </div>
               ))
