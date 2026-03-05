@@ -54,10 +54,25 @@ export type CohortProfitLtvRow = {
   profitLtv: number;
 };
 
+/**
+ * Archetype = customer product behavior pattern
+ * Step 1: product pairs discovered within first 30 days
+ * Later steps may add LTV metrics and AI labeling
+ */
 export type Archetype = {
-  items: string[]; // product names or ids
+  /** Stable identifier for React keys and LLM caching */
+  key: string; // e.g. "Vitamin C Serum|Retinol Cream"
+
+  /** Products involved in the archetype */
+  items: string[];
+
+  /** Number of unique customers exhibiting this pattern */
   customers: number;
-  profitLtv: number;
+
+  /** Step 2+ (optional for now) */
+  profitLtv?: number;
+
+  /** Step 3+ LLM labeling */
   name?: string;
   description?: string;
 };
