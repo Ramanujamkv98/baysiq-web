@@ -3,16 +3,17 @@ frontend:
   phases:
     preBuild:
       commands:
-        - npm install
+        - npm ci
     build:
       commands:
-        # Make Amplify env/secrets visible to Next.js server (build + runtime)
-        - env | grep -e OPENAI_API_KEY >> .env.production || true
+        - rm -f .env.production
+        - echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> .env.production
         - npm run build
   artifacts:
     baseDirectory: .next
     files:
-      - '**/*'
+      - "**/*"
   cache:
     paths:
       - node_modules/**/*
+      - .next/cache/**/*
