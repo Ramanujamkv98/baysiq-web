@@ -7,9 +7,8 @@ frontend:
     build:
       commands:
         - rm -f .env.production
-        # Fail fast if Amplify didn't provide the value at build time
-        - test -n "$OPENAI_API_KEY" || (echo "ERROR: OPENAI_API_KEY is empty in Amplify build env" && exit 1)
-        - echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> .env.production
+        - 'test -n "$OPENAI_API_KEY" || (echo "OPENAI_API_KEY_EMPTY_IN_BUILD_ENV" && exit 1)'
+        - 'echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> .env.production'
         - npm run build
   artifacts:
     baseDirectory: .next
