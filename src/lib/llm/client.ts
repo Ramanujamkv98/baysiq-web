@@ -19,6 +19,7 @@ export async function chatCompletion(params: {
   model: string;
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
   responseFormat?: { type: "json_object" };
+  temperature?: number;
 }): Promise<{ content: string } | { error: string }> {
 
   const key = getOpenAiKey();
@@ -36,6 +37,10 @@ export async function chatCompletion(params: {
 
   if (params.responseFormat) {
     body.response_format = params.responseFormat;
+  }
+
+    if (typeof params.temperature === "number") {
+    body.temperature = params.temperature;
   }
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
