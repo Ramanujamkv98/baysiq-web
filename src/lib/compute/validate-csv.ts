@@ -8,20 +8,22 @@ function normalizeHeader(h: string): string {
   return h.toLowerCase().trim();
 }
 
-const numSchema = z.union([
-  z.string().transform((s) => parseFloat(s)),
-  z.number(),
-]).refine((n) => !Number.isNaN(n), "Must be a number");
+const numSchema = z
+  .union([z.string().transform((s) => parseFloat(s)), z.number()])
+  .refine((n) => !Number.isNaN(n), "Must be a number");
 
-export function validateCsvHeaders(headers: string[]): {
-  success: true;
-  normalizedToOriginal: Record<string, string>;
-} | {
-  success: false;
-  error: string;
-} {
+export function validateCsvHeaders(headers: string[]):
+  | {
+      success: true;
+      normalizedToOriginal: Record<string, string>;
+    }
+  | {
+      success: false;
+      error: string;
+    } {
   const normalizedToOriginal: Record<string, string> = {};
   const seen = new Set<string>();
+
   for (const h of headers) {
     const n = normalizeHeader(h);
     if (n && !seen.has(n)) {
@@ -58,6 +60,7 @@ export function parseRow(
   for (const col of REQUIRED_CSV_COLUMNS) {
     const raw = row[normalizedToOriginal[col] ?? col] ?? row[col] ?? "";
     const value = (typeof raw === "string" ? raw.trim() : String(raw)) || "";
+
     if (numericKeys.includes(col)) {
       const parsed = numSchema.safeParse(value === "" ? "0" : value);
       if (!parsed.success) {
@@ -68,6 +71,7 @@ export function parseRow(
       out[col] = value;
     }
   }
+
   return { ok: true, row: out };
 }
 
@@ -76,6 +80,10 @@ export const costInputsSchema = z.object({
   shippingPerOrder: z.number().min(0),
   paymentProcessingPct: z.number().min(0).max(100),
   fixedTransactionFee: z.number().min(0),
+
+  defaultRefundRatePct: z.number().min(0).max(100).optional().default(0),
+
+  cacBySource: z.record(z.string(), z.number().min(0)).optional().default({}),
 });
 
 export type CostInputsValidated = z.infer<typeof costInputsSchema>;
