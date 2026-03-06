@@ -4,7 +4,9 @@ import type {
   ComputeResult,
   CohortRetentionCell,
   CohortProfitLtvRow,
-  Archetype,
+  FirstProductAffinity,
+  ProductCombination,
+  MicroSegment,
 } from "../types";
 import { parseCsv } from "./parse-csv";
 import { costInputsSchema } from "./validate-csv";
@@ -288,26 +290,7 @@ export function compute(input: ComputeInput): ComputeResult | { error: string } 
     profitLtv: r.profitLtv,
   }));
 
-  // Archetypes
-  const rawArchetypes = computeArchetypes(orderRows, customerFirstOrderMonth);
-
-  const archetypes: Archetype[] = rawArchetypes
-    .filter(
-      (a): a is Archetype =>
-        Boolean(a) &&
-        typeof (a as any).key === "string" &&
-        Array.isArray(a.items) &&
-        typeof a.customers === "number"
-    )
-    .map((a) => ({
-      key: String((a as any).key ?? a.items?.join("|") ?? ""),
-      items: Array.isArray(a.items) ? a.items : [],
-      customers: Number.isFinite(a.customers) ? a.customers : 0,
-      profitLtv: Number.isFinite(a.profitLtv) ? a.profitLtv : 0,
-      name: (a as any).name,
-      description: (a as any).description,
-    }))
-    .filter((a) => a.key.length > 0);
+    const insights = computeCustomerInsights(orderRows);
 
   return {
     kpis: {
@@ -319,7 +302,9 @@ export function compute(input: ComputeInput): ComputeResult | { error: string } 
     },
     cohortRetention,
     cohortProfitLtv,
-    archetypes,
+    first_product_affinities: insights.first_product_affinities,
+    product_combinations: insights.product_combinations,
+    micro_segments: insights.micro_segments,
     profitLtvByCohort,
     detectedSources,
     refundDiagnostics: {
@@ -329,107 +314,150 @@ export function compute(input: ComputeInput): ComputeResult | { error: string } 
   };
 }
 
-function computeArchetypes(
-  orderRows: OrderRow[],
-  customerFirstOrder: Map<string, string>
-): Archetype[] {
-  // Convert cohort month (YYYY-MM) into a timestamp representing the 1st day of that month.
-  const firstOrderDateByCustomer = new Map<string, number>();
-  for (const [cid, monthStr] of customerFirstOrder) {
-    if (!monthStr) continue;
 
-    const [yStr, mStr] = monthStr.split("-");
-    const y = Number(yStr);
-    const m = Number(mStr);
 
-    if (!Number.isFinite(y) || !Number.isFinite(m)) continue;
+type CustomerAggregate = {
+  firstOrderTs: number;
+  firstProduct: string;
+  firstChannel: string;
+  products30Days: Set<string>;
+  totalProfit: number;
+  totalCac: number;
+};
 
-    firstOrderDateByCustomer.set(cid, new Date(y, m - 1, 1).getTime());
-  }
+function safeRatio(numerator: number, denominator: number): number {
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) return 0;
+  return numerator / denominator;
+}
 
-  const byCustomerOrder: Map<string, OrderRow[]> = new Map();
+function computeCustomerInsights(orderRows: OrderRow[]): {
+  first_product_affinities: FirstProductAffinity[];
+  product_combinations: ProductCombination[];
+  micro_segments: MicroSegment[];
+} {
+  const byCustomer = new Map<string, CustomerAggregate>();
+
   for (const o of orderRows) {
-    const cid = o.customer_id;
-    if (!cid) continue;
+    const ts = new Date(o.order_date).getTime();
+    if (!Number.isFinite(ts)) continue;
 
-    const list = byCustomerOrder.get(cid) ?? [];
-    list.push(o);
-    byCustomerOrder.set(cid, list);
-  }
+    const productLabel = (o.product_name || o.product_id || "Unknown Product").trim() || "Unknown Product";
 
-  // Products purchased in the first 30 days
-  const first30DaysProductsByCustomer = new Map<string, string[]>();
-  for (const [cid, list] of byCustomerOrder) {
-    const firstTs = firstOrderDateByCustomer.get(cid);
-    if (firstTs == null) continue;
+    const existing = byCustomer.get(o.customer_id);
+    if (!existing) {
+      byCustomer.set(o.customer_id, {
+        firstOrderTs: ts,
+        firstProduct: productLabel,
+        firstChannel: o.utm_source || "unknown",
+        products30Days: new Set([productLabel]),
+        totalProfit: o.order_profit,
+        totalCac: o.acquisition_cost,
+      });
+      continue;
+    }
 
-    const cutoff = firstTs + 30 * 24 * 60 * 60 * 1000;
+    existing.totalProfit += o.order_profit;
+    existing.totalCac += o.acquisition_cost;
 
-    const inWindow = list
-      .filter((o) => {
-        const t = new Date(o.order_date).getTime();
-        return Number.isFinite(t) && t >= firstTs && t <= cutoff;
-      })
-      .map((o) => {
-        const pn = (o.product_name ? o.product_name.trim() : "") || "";
-        const pid = (o.product_id ?? "").trim();
-        return pn || pid;
-      })
-      .filter(Boolean);
-
-    const uniq = [...new Set(inWindow)];
-    if (uniq.length >= 1) {
-      first30DaysProductsByCustomer.set(cid, uniq);
+    if (ts < existing.firstOrderTs) {
+      existing.firstOrderTs = ts;
+      existing.firstProduct = productLabel;
+      existing.firstChannel = o.utm_source || "unknown";
     }
   }
 
-  // Sum profit by customer
-  const customerProfitLtv = new Map<string, number>();
   for (const o of orderRows) {
-    if (!o.customer_id) continue;
-
-    customerProfitLtv.set(
-      o.customer_id,
-      (customerProfitLtv.get(o.customer_id) ?? 0) + o.order_profit
-    );
+    const customer = byCustomer.get(o.customer_id);
+    if (!customer) continue;
+    const ts = new Date(o.order_date).getTime();
+    if (!Number.isFinite(ts)) continue;
+    const cutoff = customer.firstOrderTs + 30 * 24 * 60 * 60 * 1000;
+    if (ts > cutoff) continue;
+    const productLabel = (o.product_name || o.product_id || "Unknown Product").trim() || "Unknown Product";
+    customer.products30Days.add(productLabel);
   }
 
-  // Group customers by the set of products they bought in first 30 days
-  const groupMap = new Map<string, { customers: Set<string>; profit: number }>();
+  const customers = [...byCustomer.values()];
+  const overallAvgLtv = customers.length > 0
+    ? customers.reduce((sum, c) => sum + c.totalProfit, 0) / customers.length
+    : 0;
 
-  for (const [cid, products] of first30DaysProductsByCustomer) {
-    if (!products || products.length === 0) continue;
-
-    const key = [...products].sort().join("|");
-    const profit = customerProfitLtv.get(cid) ?? 0;
-
-    const existing = groupMap.get(key);
-    if (existing) {
-      existing.customers.add(cid);
-      existing.profit += profit;
-    } else {
-      groupMap.set(key, { customers: new Set([cid]), profit });
-    }
+  const firstProductMap = new Map<string, { customers: number; totalProfit: number; totalCac: number; channels: Map<string, number> }>();
+  for (const customer of customers) {
+    const existing = firstProductMap.get(customer.firstProduct) ?? {
+      customers: 0,
+      totalProfit: 0,
+      totalCac: 0,
+      channels: new Map<string, number>(),
+    };
+    existing.customers += 1;
+    existing.totalProfit += customer.totalProfit;
+    existing.totalCac += customer.totalCac;
+    existing.channels.set(customer.firstChannel, (existing.channels.get(customer.firstChannel) ?? 0) + 1);
+    firstProductMap.set(customer.firstProduct, existing);
   }
 
-  const archetypeList: Archetype[] = [];
-  for (const [key, value] of groupMap) {
-    if (!value) continue;
+  const first_product_affinities: FirstProductAffinity[] = [...firstProductMap.entries()]
+    .map(([first_product, value]) => {
+      const topChannel = [...value.channels.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "unknown";
+      const avgProfit = value.customers > 0 ? value.totalProfit / value.customers : 0;
+      const avgCac = value.customers > 0 ? value.totalCac / value.customers : 0;
+      return {
+        first_product,
+        customers: value.customers,
+        avg_profit_ltv: avgProfit,
+        avg_cac: avgCac,
+        ltv_cac_ratio: safeRatio(avgProfit, avgCac),
+        top_acquisition_channel: topChannel,
+      };
+    })
+    .sort((a, b) => b.customers - a.customers)
+    .slice(0, 5);
 
-    const { customers: set, profit: totalProfit } = value;
-    const items = key.split("|").filter(Boolean);
-    if (items.length === 0) continue;
-
-    const customerCount = set.size;
-
-    archetypeList.push({
-      key,
-      items,
-      customers: customerCount,
-      profitLtv: customerCount > 0 ? totalProfit / customerCount : 0,
-    });
+  const comboMap = new Map<string, { key_products: string[]; customers: number; totalProfit: number; totalCac: number }>();
+  for (const customer of customers) {
+    const key_products = [...customer.products30Days].sort();
+    if (key_products.length === 0) continue;
+    const key = key_products.join(" + ");
+    const existing = comboMap.get(key) ?? { key_products, customers: 0, totalProfit: 0, totalCac: 0 };
+    existing.customers += 1;
+    existing.totalProfit += customer.totalProfit;
+    existing.totalCac += customer.totalCac;
+    comboMap.set(key, existing);
   }
 
-  archetypeList.sort((a, b) => b.customers - a.customers);
-  return archetypeList.slice(0, 20);
+  const product_combinations: ProductCombination[] = [...comboMap.entries()]
+    .map(([product_combination, value]) => {
+      const avgProfit = value.customers > 0 ? value.totalProfit / value.customers : 0;
+      const avgCac = value.customers > 0 ? value.totalCac / value.customers : 0;
+      return {
+        product_combination,
+        key_products: value.key_products,
+        customers: value.customers,
+        avg_profit_ltv: avgProfit,
+        avg_cac: avgCac,
+        ltv_cac_ratio: safeRatio(avgProfit, avgCac),
+      };
+    })
+    .filter((item) => item.customers >= 5)
+    .sort((a, b) => b.customers - a.customers)
+    .slice(0, 5);
+
+  const micro_segments: MicroSegment[] = [...comboMap.values()]
+    .map((value) => {
+      const avgProfit = value.customers > 0 ? value.totalProfit / value.customers : 0;
+      const avgCac = value.customers > 0 ? value.totalCac / value.customers : 0;
+      return {
+        key_products: value.key_products,
+        customers: value.customers,
+        profit_ltv: avgProfit,
+        avg_cac: avgCac,
+        ltv_cac_ratio: safeRatio(avgProfit, avgCac),
+      };
+    })
+    .filter((segment) => segment.customers >= 3 && segment.profit_ltv > overallAvgLtv)
+    .sort((a, b) => b.profit_ltv - a.profit_ltv)
+    .slice(0, 5);
+
+  return { first_product_affinities, product_combinations, micro_segments };
 }
