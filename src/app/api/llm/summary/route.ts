@@ -62,16 +62,12 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 type SummaryRequestBody = {
   tab: string;
-  metrics?: Record<string, unknown>;
+  metrics: Record<string, unknown>;
 };
 
-function validateBody(body: unknown): {
-  ok: true;
-  value: SummaryRequestBody;
-} | {
-  ok: false;
-  error: string;
-} {
+function validateBody(body: unknown):
+  | { ok: true; value: SummaryRequestBody }
+  | { ok: false; error: string } {
   if (!isPlainObject(body)) {
     return {
       ok: false,
@@ -137,10 +133,7 @@ export async function POST(request: NextRequest) {
     const validated = validateBody(body);
 
     if (!validated.ok) {
-      return NextResponse.json(
-        { error: validated.error },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: validated.error }, { status: 400 });
     }
 
     const { tab, metrics } = validated.value;
@@ -160,10 +153,7 @@ export async function POST(request: NextRequest) {
         console.error("OpenAI request failed:", llmResponse.error);
       }
 
-      return NextResponse.json(
-        { error: "LLM request failed." },
-        { status: 502 }
-      );
+      return NextResponse.json({ error: "LLM request failed." }, { status: 502 });
     }
 
     const parsed = parseSummaryResponse(llmResponse.content);
@@ -193,8 +183,5 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
-  return NextResponse.json(
-    { error: "Method not allowed." },
-    { status: 405 }
-  );
+  return NextResponse.json({ error: "Method not allowed." }, { status: 405 });
 }
