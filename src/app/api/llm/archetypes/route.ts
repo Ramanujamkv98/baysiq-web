@@ -130,6 +130,7 @@ export async function POST(request: NextRequest) {
         { role: "user", content: prompt },
       ],
       responseFormat: { type: "json_object" },
+      temperature: 0.2,
     });
 
     if ("error" in response) {
