@@ -1,25 +1,25 @@
-import type { Archetype } from "../types";
-import type { LlmSummaryResult } from "../types";
+import type { LlmSummaryResult, MicroSegment } from "../types";
 
-export const ARCHETYPES_SYSTEM = `You are a data analyst for e-commerce growth teams.
-Use only the provided input data; do not invent products, channels, or metrics.
-Return a JSON object with a single key "archetypes" which is an array of objects.
-Each object must have:
-- "name": short human-friendly segment label
-- "description": one sentence, concrete and data-grounded
-- "items": array of product names in the exact same order as the input archetype
-Return only valid JSON, no markdown.`;
+export const MICRO_SEGMENTS_SYSTEM = `You are a data analyst for e-commerce growth teams.
+Use only the provided input data; do not compute metrics.
+Return a JSON object with key "segments" as an array.
+Each object must include:
+- "segment_name": short segment label
+- "insight": max 20 words
+- "action": max 15 words
+Return valid JSON only.`;
 
-export function archetypesUserPrompt(patterns: Archetype[]): string {
-  const list = patterns.map((p) => ({
-    items: p.items,
-    customers: p.customers,
-    profitLtv: p.profitLtv,
+export function microSegmentsUserPrompt(segments: MicroSegment[]): string {
+  const list = segments.map((segment) => ({
+    customers: segment.customers,
+    profit_ltv: segment.profit_ltv,
+    avg_cac: segment.avg_cac,
+    ltv_cac_ratio: segment.ltv_cac_ratio,
+    key_products: segment.key_products,
   }));
 
-    return `Label these archetypes with a name and description.\nRules:\n- Keep labels concise (2-4 words).\n- Descriptions should reference the pattern implied by item mix and customer count.\n- Do not add or remove items.\nReturn JSON: {"archetypes": [{"name": "...", "description": "...", "items": [...]}, ...]}\n\nInput:\n${JSON.stringify(list, null, 2)}`;
+  return `Generate one label + insight + action per segment.\nRules:\n- insight <= 20 words\n- action <= 15 words\n- no metric calculations\n- JSON only\n\nInput:\n${JSON.stringify(list, null, 2)}`;
 }
-
 
 export const SUMMARY_SYSTEM = `You are a senior data analyst.
 Use only the provided metrics and avoid speculation.
@@ -33,15 +33,15 @@ export function summaryUserPrompt(tab: string, metrics: Record<string, unknown>)
   return `Tab: ${tab}\nMetrics summary:\n${JSON.stringify(metrics, null, 2)}\n\nPrioritize:\n1) trends and outliers\n2) efficiency/profit implications\n3) one practical next action\n\nReturn JSON: {"bullets": ["...", ...], "recommendation": "..."}`;
 }
 
-export function parseArchetypesResponse(content: string): Array<{ name: string; description: string; items: string[] }> | null {
+export function parseMicroSegmentsResponse(content: string): Array<{ segment_name: string; insight: string; action: string }> | null {
   try {
-    const raw = JSON.parse(content) as { archetypes?: Array<{ name?: string; description?: string; items?: string[] }> };
-    const list = raw?.archetypes;
+    const raw = JSON.parse(content) as { segments?: Array<{ segment_name?: string; insight?: string; action?: string }> };
+    const list = raw?.segments;
     if (!Array.isArray(list)) return null;
     return list.map((a) => ({
-      name: typeof a.name === "string" ? a.name : "Archetype",
-      description: typeof a.description === "string" ? a.description : "",
-      items: Array.isArray(a.items) ? a.items.map(String) : [],
+      segment_name: typeof a.segment_name === "string" ? a.segment_name : "Micro Segment",
+      insight: typeof a.insight === "string" ? a.insight : "",
+      action: typeof a.action === "string" ? a.action : "",
     }));
   } catch {
     return null;
