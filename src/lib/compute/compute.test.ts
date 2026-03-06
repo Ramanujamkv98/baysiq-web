@@ -24,6 +24,9 @@ describe("compute", () => {
     expect(result.kpis.revenue).toBe(95 + 80 + 90);
     expect(result.cohortProfitLtv.length).toBeGreaterThan(0);
     expect(result.profitLtvByCohort.length).toBeGreaterThan(0);
+    expect(Array.isArray(result.first_product_affinities)).toBe(true);
+    expect(Array.isArray(result.product_combinations)).toBe(true);
+    expect(Array.isArray(result.micro_segments)).toBe(true);
   });
 
   it("returns error for empty CSV", () => {

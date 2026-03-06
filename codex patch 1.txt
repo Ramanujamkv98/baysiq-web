@@ -1,263 +1,52 @@
- (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
-diff --git a/src/components/archetypes-tab.tsx b/src/components/archetypes-tab.tsx
-index 59724ab80e2d06fa4c5bcfde0b682a59ba05fbe9..eb442800df0a6a83d4cfdefe0ec3ecab0f9f9433 100644
---- a/src/components/archetypes-tab.tsx
-+++ b/src/components/archetypes-tab.tsx
-@@ -1,132 +1,191 @@
- "use client";
+diff --git a/src/lib/compute/compute.test.ts b/src/lib/compute/compute.test.ts
+index 04b9f52ad906273b2c5e1b560d6e7b698b7e5fb6..8b131a1abe7d9262a43a16e489ce290366c696ea 100644
+--- a/src/lib/compute/compute.test.ts
++++ b/src/lib/compute/compute.test.ts
+@@ -2,44 +2,47 @@ import { describe, it, expect } from "vitest";
+ import { compute } from "./compute";
  
--import { useState, useEffect } from "react";
-+import { useEffect, useState } from "react";
- import { motion } from "framer-motion";
- import { Button } from "@/components/ui/button";
- import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
- import { useToast } from "@/hooks/use-toast";
- import { TabSummaryCard } from "./tab-summary-card";
--import type { Archetype as ArchetypeType, ComputeResult } from "@/lib/types";
-+import type { ComputeResult, MicroSegment } from "@/lib/types";
+ const sampleCsv = `order_id,customer_id,order_date,product_id,product_name,gross_revenue,discount,refund,utm_source,country
+ ord-1,cust-A,2024-01-05,prod-1,Widget A,100,5,0,google,US
+ ord-2,cust-A,2024-02-10,prod-2,Widget B,80,0,0,google,US
+ ord-3,cust-B,2024-01-15,prod-1,Widget A,100,10,0,facebook,CA`;
  
- type ArchetypesTabProps = {
-   data: ComputeResult;
+ const costs = {
+   cogsPct: 10,
+   shippingPerOrder: 5,
+   paymentProcessingPct: 2,
+   fixedTransactionFee: 0.3,
  };
  
- function formatCurrency(value: number) {
--  return new Intl.NumberFormat("en-US", {
--    style: "currency",
--    currency: "USD",
--    maximumFractionDigits: 0,
--  }).format(value);
-+  return `$${value.toFixed(2)}`;
-+}
-+
-+function formatRatio(value: number) {
-+  return value.toFixed(2);
- }
- 
- export function ArchetypesTab({ data }: ArchetypesTabProps) {
--  const [archetypes, setArchetypes] = useState<ArchetypeType[]>(data.archetypes);
-+  const [microSegments, setMicroSegments] = useState<MicroSegment[]>(data.micro_segments);
-+  const { toast } = useToast();
-+  const [loading, setLoading] = useState(false);
- 
-   useEffect(() => {
--    setArchetypes(data.archetypes);
--  }, [data.archetypes]);
--
--  const [loading, setLoading] = useState(false);
--  const { toast } = useToast();
-+    setMicroSegments(data.micro_segments);
-+  }, [data.micro_segments]);
- 
-   const handleLabelWithAi = async () => {
-     setLoading(true);
-     try {
-       const res = await fetch("/api/llm/archetypes", {
-         method: "POST",
-         headers: { "Content-Type": "application/json" },
--        body: JSON.stringify({ patterns: archetypes }),
-+        body: JSON.stringify({ segments: microSegments }),
-       });
- 
-       const json = await res.json();
--
-       if (!res.ok) {
-         toast({
-           title: "Error",
--          description: json?.error ?? "Failed to label archetypes",
-+          description: json?.error ?? "Failed to generate micro-segment labels",
-           variant: "destructive",
-         });
-         return;
-       }
- 
--      const labeled = json.archetypes as Array<{
--        name: string;
--        description: string;
--        items: string[];
--      }>;
--
-+      const labeled = json.segments as Array<{ segment_name: string; insight: string; action: string }>;
-       if (Array.isArray(labeled)) {
--        setArchetypes((prev) =>
--          prev.map((p, i) => {
--            const l = labeled[i];
--            if (!l) return p;
--            return {
--              ...p,
--              name: l.name,
--              description: l.description,
--              items: l.items?.length ? l.items : p.items,
--            };
--          })
-+        setMicroSegments((prev) =>
-+          prev.map((segment, i) => ({
-+            ...segment,
-+            segment_name: labeled[i]?.segment_name ?? segment.segment_name,
-+            insight: labeled[i]?.insight ?? segment.insight,
-+            action: labeled[i]?.action ?? segment.action,
-+          }))
-         );
--        toast({ title: "Done", description: "Archetypes labeled." });
-+        toast({ title: "Done", description: "Micro segments enriched with AI labels." });
-       }
--    } catch (e) {
-+    } catch (error) {
-       toast({
-         title: "Error",
--        description: e instanceof Error ? e.message : "Request failed",
-+        description: error instanceof Error ? error.message : "Request failed",
-         variant: "destructive",
-       });
-     } finally {
-       setLoading(false);
+ describe("compute", () => {
+   it("returns KPIs and cohort data for valid CSV", () => {
+     const result = compute({ csvText: sampleCsv, costs });
+     if ("error" in result) {
+       expect.fail(result.error);
      }
-   };
+     expect(result.kpis.orders).toBe(3);
+     expect(result.kpis.customers).toBe(2);
+     expect(result.kpis.revenue).toBe(95 + 80 + 90);
+     expect(result.cohortProfitLtv.length).toBeGreaterThan(0);
+     expect(result.profitLtvByCohort.length).toBeGreaterThan(0);
++    expect(Array.isArray(result.first_product_affinities)).toBe(true);
++    expect(Array.isArray(result.product_combinations)).toBe(true);
++    expect(Array.isArray(result.micro_segments)).toBe(true);
+   });
  
-   const metrics = {
--    archetypesCount: archetypes.length,
--    totalCustomers: archetypes.reduce((s, a) => s + a.customers, 0),
-+    firstProductAffinities: data.first_product_affinities.length,
-+    productCombinations: data.product_combinations.length,
-+    microSegments: microSegments.length,
-   };
+   it("returns error for empty CSV", () => {
+     const result = compute({ csvText: "", costs });
+     expect("error" in result).toBe(true);
+     if ("error" in result) {
+       expect(result.error).toContain("empty");
+     }
+   });
  
-   return (
-     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
--      <TabSummaryCard tab="Archetypes" metrics={metrics} />
-+      <TabSummaryCard tab="Insights" metrics={metrics} />
-+
-+      <Card>
-+        <CardHeader>
-+          <CardTitle>Top First Product Affinities</CardTitle>
-+        </CardHeader>
-+        <CardContent>
-+          <table className="w-full text-sm">
-+            <thead>
-+              <tr className="text-left border-b">
-+                <th>First Product</th>
-+                <th>Customers</th>
-+                <th>Profit LTV</th>
-+                <th>Avg CAC</th>
-+                <th>LTV/CAC</th>
-+                <th>Top Channel</th>
-+              </tr>
-+            </thead>
-+            <tbody>
-+              {data.first_product_affinities.slice(0, 5).map((row) => (
-+                <tr key={row.first_product} className="border-b">
-+                  <td>{row.first_product}</td>
-+                  <td>{row.customers}</td>
-+                  <td>{formatCurrency(row.avg_profit_ltv)}</td>
-+                  <td>{formatCurrency(row.avg_cac)}</td>
-+                  <td>{formatRatio(row.ltv_cac_ratio)}</td>
-+                  <td>{row.top_acquisition_channel}</td>
-+                </tr>
-+              ))}
-+            </tbody>
-+          </table>
-+        </CardContent>
-+      </Card>
-+
-+      <Card>
-+        <CardHeader>
-+          <CardTitle>Product Combinations</CardTitle>
-+        </CardHeader>
-+        <CardContent>
-+          <table className="w-full text-sm">
-+            <thead>
-+              <tr className="text-left border-b">
-+                <th>Product Combination</th>
-+                <th>Customers</th>
-+                <th>Profit LTV</th>
-+                <th>Avg CAC</th>
-+                <th>LTV/CAC</th>
-+              </tr>
-+            </thead>
-+            <tbody>
-+              {data.product_combinations.slice(0, 5).map((row) => (
-+                <tr key={row.product_combination} className="border-b">
-+                  <td>{row.product_combination}</td>
-+                  <td>{row.customers}</td>
-+                  <td>{formatCurrency(row.avg_profit_ltv)}</td>
-+                  <td>{formatCurrency(row.avg_cac)}</td>
-+                  <td>{formatRatio(row.ltv_cac_ratio)}</td>
-+                </tr>
-+              ))}
-+            </tbody>
-+          </table>
-+        </CardContent>
-+      </Card>
- 
-       <Card>
-         <CardHeader className="flex flex-row items-center justify-between space-y-0">
--          <CardTitle>Top product archetypes (first 30 days)</CardTitle>
-+          <CardTitle>Emerging High-Profit Micro Segments</CardTitle>
-           <Button
-             variant="outline"
-             size="sm"
-             onClick={handleLabelWithAi}
--            disabled={loading || archetypes.length === 0}
-+            disabled={loading || microSegments.length === 0}
-           >
--            {loading ? "Labeling…" : "Label with AI"}
-+            {loading ? "Generating…" : "Generate AI Insights"}
-           </Button>
-         </CardHeader>
--
-         <CardContent>
--          <div className="space-y-4">
--            {archetypes.length === 0 ? (
--              <p className="text-sm text-muted-foreground">No archetypes detected.</p>
--            ) : (
--              archetypes.map((a) => (
--                <div key={a.key} className="rounded-lg border p-4 space-y-1">
--                  <div className="font-medium">{a.name ?? a.items.join(" + ")}</div>
--
--                  {a.description && (
--                    <p className="text-sm text-muted-foreground">{a.description}</p>
--                  )}
--
--                  <p className="text-xs text-muted-foreground">
--                    Items: {a.items.join(", ")} · Customers: {a.customers} · Profit LTV:{" "}
--                    {typeof a.profitLtv === "number" ? formatCurrency(a.profitLtv) : "—"}
--                  </p>
--                </div>
--              ))
--            )}
--          </div>
-+          <table className="w-full text-sm">
-+            <thead>
-+              <tr className="text-left border-b">
-+                <th>Segment</th>
-+                <th>Customers</th>
-+                <th>Profit LTV</th>
-+                <th>Avg CAC</th>
-+                <th>LTV/CAC</th>
-+                <th>Key Products</th>
-+                <th>Insight</th>
-+                <th>Action</th>
-+              </tr>
-+            </thead>
-+            <tbody>
-+              {microSegments.slice(0, 5).map((row, index) => (
-+                <tr key={`${row.key_products.join("|")}-${index}`} className="border-b align-top">
-+                  <td>{row.segment_name ?? `Segment ${index + 1}`}</td>
-+                  <td>{row.customers}</td>
-+                  <td>{formatCurrency(row.profit_ltv)}</td>
-+                  <td>{formatCurrency(row.avg_cac)}</td>
-+                  <td>{formatRatio(row.ltv_cac_ratio)}</td>
-+                  <td>{row.key_products.join(", ")}</td>
-+                  <td>{row.insight ?? "—"}</td>
-+                  <td>{row.action ?? "—"}</td>
-+                </tr>
-+              ))}
-+            </tbody>
-+          </table>
-         </CardContent>
-       </Card>
-     </motion.div>
-   );
- }
- 
-EOF
-)
+   it("returns error for missing required columns", () => {
+     const badCsv = "order_id,customer_id\n1,2";
+     const result = compute({ csvText: badCsv, costs });
+     expect("error" in result).toBe(true);
+     if ("error" in result) {
+       expect(result.error.toLowerCase()).toMatch(/missing|column/);
+     }
+   });
+ });
