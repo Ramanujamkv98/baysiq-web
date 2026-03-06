@@ -1,34 +1,33 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { TabSummaryCard } from "./tab-summary-card";
-import type { Archetype as ArchetypeType, ComputeResult } from "@/lib/types";
+import type { ComputeResult, MicroSegment } from "@/lib/types";
 
 type ArchetypesTabProps = {
   data: ComputeResult;
 };
 
 function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
+  return `$${value.toFixed(2)}`;
+}
+
+function formatRatio(value: number) {
+  return value.toFixed(2);
 }
 
 export function ArchetypesTab({ data }: ArchetypesTabProps) {
-  const [archetypes, setArchetypes] = useState<ArchetypeType[]>(data.archetypes);
+  const [microSegments, setMicroSegments] = useState<MicroSegment[]>(data.micro_segments);
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    setArchetypes(data.archetypes);
-  }, [data.archetypes]);
-
-  const [loading, setLoading] = useState(false);
-  const { toast } = useToast();
+    setMicroSegments(data.micro_segments);
+  }, [data.micro_segments]);
 
   const handleLabelWithAi = async () => {
     setLoading(true);
@@ -36,45 +35,35 @@ export function ArchetypesTab({ data }: ArchetypesTabProps) {
       const res = await fetch("/api/llm/archetypes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patterns: archetypes }),
+        body: JSON.stringify({ segments: microSegments }),
       });
 
       const json = await res.json();
-
       if (!res.ok) {
         toast({
           title: "Error",
-          description: json?.error ?? "Failed to label archetypes",
+          description: json?.error ?? "Failed to generate micro-segment labels",
           variant: "destructive",
         });
         return;
       }
 
-      const labeled = json.archetypes as Array<{
-        name: string;
-        description: string;
-        items: string[];
-      }>;
-
+      const labeled = json.segments as Array<{ segment_name: string; insight: string; action: string }>;
       if (Array.isArray(labeled)) {
-        setArchetypes((prev) =>
-          prev.map((p, i) => {
-            const l = labeled[i];
-            if (!l) return p;
-            return {
-              ...p,
-              name: l.name,
-              description: l.description,
-              items: l.items?.length ? l.items : p.items,
-            };
-          })
+        setMicroSegments((prev) =>
+          prev.map((segment, i) => ({
+            ...segment,
+            segment_name: labeled[i]?.segment_name ?? segment.segment_name,
+            insight: labeled[i]?.insight ?? segment.insight,
+            action: labeled[i]?.action ?? segment.action,
+          }))
         );
-        toast({ title: "Done", description: "Archetypes labeled." });
+        toast({ title: "Done", description: "Micro segments enriched with AI labels." });
       }
-    } catch (e) {
+    } catch (error) {
       toast({
         title: "Error",
-        description: e instanceof Error ? e.message : "Request failed",
+        description: error instanceof Error ? error.message : "Request failed",
         variant: "destructive",
       });
     } finally {
@@ -83,48 +72,118 @@ export function ArchetypesTab({ data }: ArchetypesTabProps) {
   };
 
   const metrics = {
-    archetypesCount: archetypes.length,
-    totalCustomers: archetypes.reduce((s, a) => s + a.customers, 0),
+    firstProductAffinities: data.first_product_affinities.length,
+    productCombinations: data.product_combinations.length,
+    microSegments: microSegments.length,
   };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-      <TabSummaryCard tab="Archetypes" metrics={metrics} />
+      <TabSummaryCard tab="Insights" metrics={metrics} />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Top First Product Affinities</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left border-b">
+                <th>First Product</th>
+                <th>Customers</th>
+                <th>Profit LTV</th>
+                <th>Avg CAC</th>
+                <th>LTV/CAC</th>
+                <th>Top Channel</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.first_product_affinities.slice(0, 5).map((row) => (
+                <tr key={row.first_product} className="border-b">
+                  <td>{row.first_product}</td>
+                  <td>{row.customers}</td>
+                  <td>{formatCurrency(row.avg_profit_ltv)}</td>
+                  <td>{formatCurrency(row.avg_cac)}</td>
+                  <td>{formatRatio(row.ltv_cac_ratio)}</td>
+                  <td>{row.top_acquisition_channel}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Product Combinations</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left border-b">
+                <th>Product Combination</th>
+                <th>Customers</th>
+                <th>Profit LTV</th>
+                <th>Avg CAC</th>
+                <th>LTV/CAC</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.product_combinations.slice(0, 5).map((row) => (
+                <tr key={row.product_combination} className="border-b">
+                  <td>{row.product_combination}</td>
+                  <td>{row.customers}</td>
+                  <td>{formatCurrency(row.avg_profit_ltv)}</td>
+                  <td>{formatCurrency(row.avg_cac)}</td>
+                  <td>{formatRatio(row.ltv_cac_ratio)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle>Top product archetypes (first 30 days)</CardTitle>
+          <CardTitle>Emerging High-Profit Micro Segments</CardTitle>
           <Button
             variant="outline"
             size="sm"
             onClick={handleLabelWithAi}
-            disabled={loading || archetypes.length === 0}
+            disabled={loading || microSegments.length === 0}
           >
-            {loading ? "Labeling…" : "Label with AI"}
+            {loading ? "Generating…" : "Generate AI Insights"}
           </Button>
         </CardHeader>
-
         <CardContent>
-          <div className="space-y-4">
-            {archetypes.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No archetypes detected.</p>
-            ) : (
-              archetypes.map((a) => (
-                <div key={a.key} className="rounded-lg border p-4 space-y-1">
-                  <div className="font-medium">{a.name ?? a.items.join(" + ")}</div>
-
-                  {a.description && (
-                    <p className="text-sm text-muted-foreground">{a.description}</p>
-                  )}
-
-                  <p className="text-xs text-muted-foreground">
-                    Items: {a.items.join(", ")} · Customers: {a.customers} · Profit LTV:{" "}
-                    {typeof a.profitLtv === "number" ? formatCurrency(a.profitLtv) : "—"}
-                  </p>
-                </div>
-              ))
-            )}
-          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left border-b">
+                <th>Segment</th>
+                <th>Customers</th>
+                <th>Profit LTV</th>
+                <th>Avg CAC</th>
+                <th>LTV/CAC</th>
+                <th>Key Products</th>
+                <th>Insight</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {microSegments.slice(0, 5).map((row, index) => (
+                <tr key={`${row.key_products.join("|")}-${index}`} className="border-b align-top">
+                  <td>{row.segment_name ?? `Segment ${index + 1}`}</td>
+                  <td>{row.customers}</td>
+                  <td>{formatCurrency(row.profit_ltv)}</td>
+                  <td>{formatCurrency(row.avg_cac)}</td>
+                  <td>{formatRatio(row.ltv_cac_ratio)}</td>
+                  <td>{row.key_products.join(", ")}</td>
+                  <td>{row.insight ?? "—"}</td>
+                  <td>{row.action ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </CardContent>
       </Card>
     </motion.div>
