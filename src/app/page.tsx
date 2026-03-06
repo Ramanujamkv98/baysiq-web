@@ -82,17 +82,16 @@ export default function Home() {
           animate={{ opacity: 1, y: 0 }}
           className="text-center space-y-6"
         >
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">Baysiq</p>
-            <h1 className="text-4xl md:text-5xl font-semibold tracking-tight text-foreground">
-              Turn raw Shopify exports into cohort retention + profit LTV — in minutes.
-            </h1>
-          </div>
-
+          <h1 className="text-4xl md:text-5xl font-semibold tracking-tight text-foreground">
+          Turn raw Shopify exports into cohort retention + profit LTV — in minutes.
+          </h1>
+          <p className="text-base md:text-lg text-red-500 font-medium max-w-2xl mx-auto">
+            Baysiq doesn’t show dashboards.  
+            It tells you where profit comes from — and where to find the next opportunity.
+          </p>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
             Upload orders CSV. Add costs. Get cohorts, archetypes, and LTV. No setup.
           </p>
-
           <div className="flex flex-col sm:flex-row justify-center gap-3">
             <Button size="lg" onClick={scrollToApp}>
               Upload CSV
