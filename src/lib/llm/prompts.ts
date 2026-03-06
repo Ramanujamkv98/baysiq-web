@@ -1,7 +1,14 @@
 import type { Archetype } from "../types";
 import type { LlmSummaryResult } from "../types";
 
-export const ARCHETYPES_SYSTEM = `You are a data analyst. Given a list of product-purchase archetypes (each with items and metrics), return a JSON object with a single key "archetypes" which is an array of objects. Each object must have: "name" (short label, e.g. "Weekend Grillers"), "description" (one sentence), and "items" (array of product names, same order as input). Return only valid JSON, no markdown.`;
+export const ARCHETYPES_SYSTEM = `You are a data analyst for e-commerce growth teams.
+Use only the provided input data; do not invent products, channels, or metrics.
+Return a JSON object with a single key "archetypes" which is an array of objects.
+Each object must have:
+- "name": short human-friendly segment label
+- "description": one sentence, concrete and data-grounded
+- "items": array of product names in the exact same order as the input archetype
+Return only valid JSON, no markdown.`;
 
 export function archetypesUserPrompt(patterns: Archetype[]): string {
   const list = patterns.map((p) => ({
@@ -9,13 +16,21 @@ export function archetypesUserPrompt(patterns: Archetype[]): string {
     customers: p.customers,
     profitLtv: p.profitLtv,
   }));
-  return `Label these archetypes with a name and description. Return JSON: {"archetypes": [{"name": "...", "description": "...", "items": [...]}, ...]}\n\nInput:\n${JSON.stringify(list, null, 2)}`;
+
+    return `Label these archetypes with a name and description.\nRules:\n- Keep labels concise (2-4 words).\n- Descriptions should reference the pattern implied by item mix and customer count.\n- Do not add or remove items.\nReturn JSON: {"archetypes": [{"name": "...", "description": "...", "items": [...]}, ...]}\n\nInput:\n${JSON.stringify(list, null, 2)}`;
 }
 
-export const SUMMARY_SYSTEM = `You are a data analyst. Given a tab name and key metrics, return a JSON object with two keys: "bullets" (array of 3-5 short insight bullets) and "recommendation" (one short recommendation sentence). Return only valid JSON, no markdown.`;
+
+export const SUMMARY_SYSTEM = `You are a senior data analyst.
+Use only the provided metrics and avoid speculation.
+Given a tab name and key metrics, return a JSON object with two keys:
+- "bullets": array of 3-5 short insight bullets
+- "recommendation": one short action-oriented recommendation sentence
+If a metric is missing, skip it instead of guessing.
+Return only valid JSON, no markdown.`;
 
 export function summaryUserPrompt(tab: string, metrics: Record<string, unknown>): string {
-  return `Tab: ${tab}\nMetrics summary:\n${JSON.stringify(metrics, null, 2)}\n\nReturn JSON: {"bullets": ["...", ...], "recommendation": "..."}`;
+  return `Tab: ${tab}\nMetrics summary:\n${JSON.stringify(metrics, null, 2)}\n\nPrioritize:\n1) trends and outliers\n2) efficiency/profit implications\n3) one practical next action\n\nReturn JSON: {"bullets": ["...", ...], "recommendation": "..."}`;
 }
 
 export function parseArchetypesResponse(content: string): Array<{ name: string; description: string; items: string[] }> | null {
