@@ -61,7 +61,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 type SummaryRequestBody = {
-  tab: string;
+  tab: string; // normalized to "cohorts" | "archetypes" | "ltv"
   metrics: Record<string, unknown>;
 };
 
@@ -75,10 +75,20 @@ function validateBody(body: unknown):
     };
   }
 
-  const tab = body.tab;
+  const rawTab = body.tab;
   const metrics = body.metrics;
 
-  if (typeof tab !== "string" || !ALLOWED_TABS.has(tab)) {
+  if (typeof rawTab !== "string") {
+    return {
+      ok: false,
+      error: "Invalid tab. Expected a string.",
+    };
+  }
+
+  // ✅ Normalize to make the API resilient (e.g., "Cohorts" -> "cohorts")
+  const tab = rawTab.trim().toLowerCase();
+
+  if (!ALLOWED_TABS.has(tab)) {
     return {
       ok: false,
       error: "Invalid tab. Expected one of: cohorts, archetypes, ltv.",
@@ -95,7 +105,7 @@ function validateBody(body: unknown):
   return {
     ok: true,
     value: {
-      tab,
+      tab, // ✅ return normalized tab
       metrics: isPlainObject(metrics) ? metrics : {},
     },
   };
