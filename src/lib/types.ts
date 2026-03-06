@@ -15,11 +15,26 @@ export const REQUIRED_CSV_COLUMNS = [
   "country",
 ] as const;
 
+export type CacBySource = Record<string, number>;
+
 export type CostInputs = {
   cogsPct: number; // 0–100
   shippingPerOrder: number;
   paymentProcessingPct: number; // 0–100
   fixedTransactionFee: number;
+
+  /**
+   * Fallback refund assumption when you do not trust / do not have true refund data.
+   * If actual refund > 0 on the row, actual refund wins.
+   * If actual refund = 0, this assumed % can be applied to post-discount revenue.
+   */
+  defaultRefundRatePct?: number; // 0–100
+
+  /**
+   * CAC keyed by normalized utm_source, e.g.
+   * { meta: 18, google: 22, email: 2, organic: 0 }
+   */
+  cacBySource?: CacBySource;
 };
 
 export type OrderRow = {
@@ -33,8 +48,19 @@ export type OrderRow = {
   refund: number;
   utm_source: string;
   country: string;
+
+  /** Refund actually used by the engine (actual refund or fallback assumption) */
+  effective_refund: number;
+
   net_revenue: number;
   order_profit: number;
+
+  /** CAC applied only on first valid order row for the customer */
+  acquisition_cost: number;
+
+  /** Whether this row had an actual refund value > 0 */
+  is_true_refund: boolean;
+
   order_month: string; // YYYY-MM
   cohort_month: string; // YYYY-MM (customer first order month)
   month_index: number; // 0, 1, 2, ...
@@ -56,20 +82,20 @@ export type CohortProfitLtvRow = {
 
 /**
  * Archetype = customer product behavior pattern
- * Step 1: product pairs discovered within first 30 days
+ * Step 1: product sets discovered within first 30 days
  * Later steps may add LTV metrics and AI labeling
  */
 export type Archetype = {
   /** Stable identifier for React keys + later caching */
-  key: string; // e.g. "Vitamin C Serum|Retinol Cream" (sorted)
+  key: string;
 
   /** Products involved in the archetype */
-  items: string[]; // Step 1: typically length 2
+  items: string[];
 
   /** Number of unique customers exhibiting this pattern */
   customers: number;
 
-  /** Step 2+ (optional for now) */
+  /** Average profit LTV across customers in this archetype */
   profitLtv?: number;
 
   /** Step 3+ LLM labeling */
@@ -85,10 +111,20 @@ export type ComputeResult = {
     profit: number;
     repeatPurchaseRate: number; // 0–100
   };
+
   cohortRetention: CohortRetentionCell[];
   cohortProfitLtv: CohortProfitLtvRow[];
   archetypes: Archetype[];
   profitLtvByCohort: { cohortMonth: string; profitLtv: number }[];
+
+  /** Distinct normalized source labels found in the CSV */
+  detectedSources: string[];
+
+  /** Small refund diagnostics for UI/debugging */
+  refundDiagnostics: {
+    rowsWithTrueRefunds: number;
+    rowsUsingRefundAssumption: number;
+  };
 };
 
 export type LlmArchetypeLabel = {
