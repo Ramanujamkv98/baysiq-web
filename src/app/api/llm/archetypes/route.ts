@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chatCompletion, hasOpenAiKey } from "@/lib/llm/client";
 import {
-  archetypesUserPrompt,
-  ARCHETYPES_SYSTEM,
-  parseArchetypesResponse,
+  microSegmentsUserPrompt,
+  MICRO_SEGMENTS_SYSTEM,
+  parseMicroSegmentsResponse,
 } from "@/lib/llm/prompts";
-import type { Archetype } from "@/lib/types";
+import type { MicroSegment } from "@/lib/types";
 
 export const runtime = "nodejs";
 
-// --- Basic rate limiting (MVP) ---
-const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
+const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 12;
 
 const requestStore = new Map<string, { count: number; resetAt: number }>();
@@ -48,44 +47,46 @@ function checkRateLimit(
   return { allowed: true };
 }
 
-// --- Input validation ---
-function isArchetypeArray(value: unknown): value is Archetype[] {
+function isMicroSegmentArray(value: unknown): value is MicroSegment[] {
   return Array.isArray(value) && value.length > 0;
 }
 
-type ArchetypeRequestBody = {
-  patterns: Archetype[];
+type SegmentRequestBody = {
+  segments: MicroSegment[];
 };
 
-function validateBody(body: unknown): {
-  ok: true;
-  value: ArchetypeRequestBody;
-} | {
-  ok: false;
-  error: string;
-} {
+function validateBody(body: unknown):
+  | {
+      ok: true;
+      value: SegmentRequestBody;
+    }
+  | {
+      ok: false;
+      error: string;
+    } {
   if (!body || typeof body !== "object") {
     return { ok: false, error: "Invalid request body." };
   }
 
-  const patterns = (body as any).patterns;
+  const maybeBody = body as { segments?: unknown };
+  const segments = maybeBody.segments;
 
-  if (!isArchetypeArray(patterns)) {
+  if (!isMicroSegmentArray(segments)) {
     return {
       ok: false,
-      error: "Request body must include { patterns: Archetype[] }.",
+      error: "Request body must include { segments: MicroSegment[] }.",
     };
   }
 
   return {
     ok: true,
-    value: { patterns },
+    value: { segments },
   };
 }
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
-  const rate = checkRateLimit(`archetypes:${ip}`);
+  const rate = checkRateLimit(`segments:${ip}`);
 
   if (!rate.allowed) {
     return NextResponse.json(
@@ -98,14 +99,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (!hasOpenAiKey()) {
-    if (process.env.NODE_ENV !== "production") {
-      console.error("OPENAI_API_KEY missing.");
-    }
-
-    return NextResponse.json(
-      { error: "Server misconfiguration." },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Server misconfiguration." }, { status: 500 });
   }
 
   try {
@@ -113,20 +107,15 @@ export async function POST(request: NextRequest) {
     const validated = validateBody(body);
 
     if (!validated.ok) {
-      return NextResponse.json(
-        { error: validated.error },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: validated.error }, { status: 400 });
     }
 
-    const { patterns } = validated.value;
-
-    const prompt = archetypesUserPrompt(patterns);
+    const prompt = microSegmentsUserPrompt(validated.value.segments);
 
     const response = await chatCompletion({
       model: "gpt-4o-mini",
       messages: [
-        { role: "system", content: ARCHETYPES_SYSTEM },
+        { role: "system", content: MICRO_SEGMENTS_SYSTEM },
         { role: "user", content: prompt },
       ],
       responseFormat: { type: "json_object" },
@@ -134,46 +123,21 @@ export async function POST(request: NextRequest) {
     });
 
     if ("error" in response) {
-      if (process.env.NODE_ENV !== "production") {
-        console.error("OpenAI request failed:", response.error);
-      }
-
-      return NextResponse.json(
-        { error: "LLM request failed." },
-        { status: 502 }
-      );
+      return NextResponse.json({ error: "LLM request failed." }, { status: 502 });
     }
 
-    const parsed = parseArchetypesResponse(response.content);
+    const parsed = parseMicroSegmentsResponse(response.content);
 
     if (!parsed) {
-      if (process.env.NODE_ENV !== "production") {
-        console.error("Invalid archetype response:", response.content);
-      }
-
-      return NextResponse.json(
-        { error: "Invalid response format from LLM." },
-        { status: 502 }
-      );
+      return NextResponse.json({ error: "Invalid response format from LLM." }, { status: 502 });
     }
 
-    return NextResponse.json({ archetypes: parsed }, { status: 200 });
-  } catch (err) {
-    if (process.env.NODE_ENV !== "production") {
-      console.error("Archetypes API error:", err);
-    }
-
-    return NextResponse.json(
-      { error: "Internal server error." },
-      { status: 500 }
-    );
+    return NextResponse.json({ segments: parsed }, { status: 200 });
+  } catch {
+    return NextResponse.json({ error: "Internal server error." }, { status: 500 });
   }
 }
 
-// Explicitly block GET requests
 export async function GET() {
-  return NextResponse.json(
-    { error: "Method not allowed." },
-    { status: 405 }
-  );
+  return NextResponse.json({ error: "Method not allowed." }, { status: 405 });
 }
