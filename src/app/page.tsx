@@ -15,6 +15,8 @@ const defaultCosts: CostInputs = {
   shippingPerOrder: 0,
   paymentProcessingPct: 0,
   fixedTransactionFee: 0,
+  defaultRefundRatePct: 0,
+  cacBySource: {},
 };
 
 export default function Home() {
@@ -37,15 +39,19 @@ export default function Home() {
       });
       return;
     }
+
     setLoading(true);
     setResult(null);
+
     try {
       const res = await fetch("/api/compute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ csvText, costs }),
       });
+
       const data = await res.json();
+
       if (!res.ok) {
         toast({
           title: "Error",
@@ -54,6 +60,7 @@ export default function Home() {
         });
         return;
       }
+
       setResult(data);
     } catch (e) {
       toast({
@@ -94,8 +101,9 @@ export default function Home() {
               size="lg"
               variant="outline"
               onClick={() => {
-                // simple "demo" action: scroll to preview section
-                document.getElementById("preview")?.scrollIntoView({ behavior: "smooth" });
+                document
+                  .getElementById("preview")
+                  ?.scrollIntoView({ behavior: "smooth" });
               }}
             >
               View demo
@@ -105,8 +113,8 @@ export default function Home() {
 
         {/* TRUST STRIP */}
         <section className="text-center text-sm text-muted-foreground space-y-1">
-          <p>Works locally in your browser. Optional AI summaries.</p>
-          <p>No data stored unless you deploy with your own backend.</p>
+          <p>Upload a CSV, enter CAC and cost assumptions, and explore profit-aware retention.</p>
+          <p>Optional AI summaries. Refund-aware modeling. No setup required.</p>
         </section>
 
         {/* PREVIEW */}
@@ -145,15 +153,15 @@ export default function Home() {
               </CardHeader>
               <CardContent className="text-sm">
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-3">
                     <span className="font-mono text-muted-foreground">2025-03</span>
                     <span className="font-medium">100% · 39% · 20% · 11%</span>
                   </div>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-3">
                     <span className="font-mono text-muted-foreground">2025-04</span>
                     <span className="font-medium">100% · 30% · 14% · 7%</span>
                   </div>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-3">
                     <span className="font-mono text-muted-foreground">2025-05</span>
                     <span className="font-medium">100% · 67% · — · —</span>
                   </div>
@@ -207,10 +215,10 @@ export default function Home() {
 
             <Card className="shadow-sm">
               <CardHeader>
-                <CardTitle className="text-base">2) Enter costs</CardTitle>
+                <CardTitle className="text-base">2) Enter costs + CAC</CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground">
-                Add COGS, shipping, and payment fees to compute profit.
+                Add COGS, fees, refund assumption, and CAC by source.
               </CardContent>
             </Card>
 
@@ -235,24 +243,31 @@ export default function Home() {
             <div className="space-y-1">
               <p className="font-medium">What CSV format do you need?</p>
               <p className="text-muted-foreground">
-                A Shopify orders export (or equivalent) with order date, order amount, and a stable
-                customer identifier. If your columns differ, we can map them in a later version.
+                A Shopify-style orders export with order date, customer ID, gross revenue,
+                discount, refund, and utm_source columns.
               </p>
             </div>
 
             <div className="space-y-1">
-              <p className="font-medium">Do you store data?</p>
+              <p className="font-medium">How are refunds handled?</p>
               <p className="text-muted-foreground">
-                The upload and analysis run in your app session. If you deploy with your own backend,
-                storage behavior depends on your setup.
+                Baysiq uses the actual refund amount in your CSV when available. If there is no
+                refund amount on a row, it can fall back to your default refund % assumption.
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <p className="font-medium">How is CAC applied?</p>
+              <p className="text-muted-foreground">
+                CAC is mapped from utm_source and applied only to the first order for each customer.
               </p>
             </div>
 
             <div className="space-y-1">
               <p className="font-medium">What does “profit LTV” mean?</p>
               <p className="text-muted-foreground">
-                Lifetime value after subtracting COGS, shipping, and payment processing fees—so you
-                can see what customers are worth in profit, not just revenue.
+                Lifetime value after subtracting discounts, refunds, COGS, shipping, payment fees,
+                and acquisition cost.
               </p>
             </div>
           </div>
@@ -269,13 +284,14 @@ export default function Home() {
               Try it on your CSV
             </h2>
             <p className="text-muted-foreground">
-              Upload orders → compute cohorts → archetypes → profit LTV.
+              Upload orders → add CAC + costs → compute cohorts → archetypes → profit LTV.
             </p>
           </motion.header>
 
           <div className="grid md:grid-cols-2 gap-6">
             <UploadCard csvText={csvText} onCsvChange={setCsvText} />
             <CostInputsCard
+              csvText={csvText}
               costs={costs}
               onCostsChange={setCosts}
               onUpdateResults={updateResults}
