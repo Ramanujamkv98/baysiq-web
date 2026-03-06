@@ -10,11 +10,39 @@ type CohortsTabProps = {
   data: ComputeResult;
 };
 
+function clamp01(n: number) {
+  return Math.max(0, Math.min(1, n));
+}
+
+// 0% -> red, 50% -> orange, 100% -> green
+function retentionBg(pct: number | null) {
+  if (pct === null || Number.isNaN(pct)) return "transparent";
+
+  const t = clamp01(pct / 100);
+
+  const hue =
+    t < 0.5
+      ? 0 + (t / 0.5) * 30 // red -> orange
+      : 30 + ((t - 0.5) / 0.5) * 90; // orange -> green
+
+  const sat = 85;
+  const light = 92 - t * 35;
+
+  return `hsl(${hue} ${sat}% ${light}%)`;
+}
+
+function retentionText(pct: number | null) {
+  if (pct === null) return "text-slate-500";
+  // background is never super dark with our lightness settings, so dark text stays readable
+  return "text-slate-900";
+}
+
 export function CohortsTab({ data }: CohortsTabProps) {
   const { cohortRetention, cohortProfitLtv } = data;
 
   const heatmapGrid = useMemo(() => {
     const byCohort = new Map<string, { monthIndex: number; retentionPct: number }[]>();
+
     for (const c of cohortRetention) {
       let arr = byCohort.get(c.cohortMonth);
       if (!arr) {
@@ -23,6 +51,7 @@ export function CohortsTab({ data }: CohortsTabProps) {
       }
       arr.push({ monthIndex: c.monthIndex, retentionPct: c.retentionPct });
     }
+
     const cohorts = [...byCohort.keys()].sort();
     const maxMi = Math.max(0, ...cohortRetention.map((c) => c.monthIndex));
     return { cohorts, maxMi, byCohort };
@@ -38,26 +67,27 @@ export function CohortsTab({ data }: CohortsTabProps) {
   );
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="space-y-6"
-    >
-      <TabSummaryCard tab="Cohorts" metrics={metrics} />
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+      {/* Use the API tab key to avoid casing issues */}
+      <TabSummaryCard tab="cohorts" metrics={metrics} />
 
       <Card>
         <CardHeader>
-          <CardTitle>Cohort retention (by month index)</CardTitle>
+          <CardTitle>Cohort retention by first purchase month</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Rows = cohort month, columns = month index (0 = first month). Cell = retention %.
+            Rows = month customers were acquired. Columns = months after first purchase.
           </p>
         </CardHeader>
+
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-lg border">
             <table className="w-full text-sm border-collapse">
-              <thead>
+              <thead className="bg-muted/40">
                 <tr>
-                  <th className="text-left p-2 border-b font-medium">Cohort</th>
+                  {/* Sticky cohort column */}
+                  <th className="sticky left-0 z-10 bg-muted/40 text-left p-2 border-b font-medium">
+                    Cohort
+                  </th>
                   {Array.from({ length: heatmapGrid.maxMi + 1 }, (_, i) => (
                     <th key={i} className="p-2 border-b font-medium text-center">
                       M{i}
@@ -65,27 +95,39 @@ export function CohortsTab({ data }: CohortsTabProps) {
                   ))}
                 </tr>
               </thead>
+
               <tbody>
                 {heatmapGrid.cohorts.map((cohort) => {
                   const cells = heatmapGrid.byCohort.get(cohort) ?? [];
                   const byMi = new Map(cells.map((c) => [c.monthIndex, c.retentionPct]));
+
                   return (
-                    <tr key={cohort}>
-                      <td className="p-2 border-b font-mono text-muted-foreground">{cohort}</td>
+                    <tr key={cohort} className="hover:bg-muted/20">
+                      <td className="sticky left-0 z-10 bg-background p-2 border-b font-mono text-muted-foreground">
+                        {cohort}
+                      </td>
+
                       {Array.from({ length: heatmapGrid.maxMi + 1 }, (_, mi) => {
-                        const pct = byMi.get(mi) ?? 0;
-                        const intensity = Math.min(1, pct / 100);
+                        const pct = byMi.get(mi);
+                        const isMissing = pct === undefined;
+
+                        const displayPct = isMissing ? null : pct;
+                        const bg = retentionBg(displayPct);
+
                         return (
                           <td
                             key={mi}
-                            className="p-2 border-b text-center"
-                            style={{
-                              backgroundColor: `hsl(199 89% 48% / ${0.15 + intensity * 0.85})`,
-                              color: intensity > 0.5 ? "white" : "inherit",
-                            }}
-                            title={`${pct.toFixed(1)}%`}
+                            className={`p-2 border-b text-center font-medium ${retentionText(
+                              displayPct
+                            )}`}
+                            style={{ backgroundColor: bg }}
+                            title={
+                              displayPct === null
+                                ? "Not enough data yet"
+                                : `${displayPct.toFixed(1)}%`
+                            }
                           >
-                            {pct > 0 ? `${pct.toFixed(0)}%` : "—"}
+                            {displayPct === null ? "—" : `${displayPct.toFixed(0)}%`}
                           </td>
                         );
                       })}
@@ -102,10 +144,11 @@ export function CohortsTab({ data }: CohortsTabProps) {
         <CardHeader>
           <CardTitle>Cohort profit LTV summary</CardTitle>
         </CardHeader>
+
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-lg border">
             <table className="w-full text-sm border-collapse">
-              <thead>
+              <thead className="bg-muted/40">
                 <tr>
                   <th className="text-left p-2 border-b font-medium">Cohort</th>
                   <th className="text-right p-2 border-b font-medium">Size</th>
@@ -114,7 +157,7 @@ export function CohortsTab({ data }: CohortsTabProps) {
               </thead>
               <tbody>
                 {cohortProfitLtv.map((r) => (
-                  <tr key={r.cohortMonth}>
+                  <tr key={r.cohortMonth} className="hover:bg-muted/20">
                     <td className="p-2 border-b font-mono">{r.cohortMonth}</td>
                     <td className="p-2 border-b text-right">{r.cohortSize}</td>
                     <td className="p-2 border-b text-right">
