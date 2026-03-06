@@ -38,22 +38,20 @@ export function parseCsv(csvText: string): ParseCsvResult {
     return { success: false, error: headerResult.error };
   }
 
-  const normalizedToOriginal: Record<string, string> = {};
-  for (const h of headers) {
-    const n = h.toLowerCase().trim();
-    normalizedToOriginal[n] = h;
-  }
+  const normalizedToOriginal = headerResult.normalizedToOriginal;
 
   const out: Record<string, string | number>[] = [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const parsedRow = parseRow(row as Record<string, string>, normalizedToOriginal);
+
     if (!parsedRow.ok) {
       return {
         success: false,
         error: `Row ${i + 2}: ${parsedRow.error}.`,
       };
     }
+
     out.push(parsedRow.row);
   }
 
