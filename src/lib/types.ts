@@ -80,27 +80,33 @@ export type CohortProfitLtvRow = {
   profitLtv: number;
 };
 
-/**
- * Archetype = customer product behavior pattern
- * Step 1: product sets discovered within first 30 days
- * Later steps may add LTV metrics and AI labeling
- */
-export type Archetype = {
-  /** Stable identifier for React keys + later caching */
-  key: string;
-
-  /** Products involved in the archetype */
-  items: string[];
-
-  /** Number of unique customers exhibiting this pattern */
+export type FirstProductAffinity = {
+  first_product: string;
   customers: number;
+  avg_profit_ltv: number;
+  avg_cac: number;
+  ltv_cac_ratio: number;
+  top_acquisition_channel: string;
+};
 
-  /** Average profit LTV across customers in this archetype */
-  profitLtv?: number;
+export type ProductCombination = {
+  product_combination: string;
+  key_products: string[];
+  customers: number;
+  avg_profit_ltv: number;
+  avg_cac: number;
+  ltv_cac_ratio: number;
+};
 
-  /** Step 3+ LLM labeling */
-  name?: string;
-  description?: string;
+export type MicroSegment = {
+  key_products: string[];
+  customers: number;
+  profit_ltv: number;
+  avg_cac: number;
+  ltv_cac_ratio: number;
+  segment_name?: string;
+  insight?: string;
+  action?: string;
 };
 
 export type ComputeResult = {
@@ -114,7 +120,9 @@ export type ComputeResult = {
 
   cohortRetention: CohortRetentionCell[];
   cohortProfitLtv: CohortProfitLtvRow[];
-  archetypes: Archetype[];
+  first_product_affinities: FirstProductAffinity[];
+  product_combinations: ProductCombination[];
+  micro_segments: MicroSegment[];
   profitLtvByCohort: { cohortMonth: string; profitLtv: number }[];
 
   /** Distinct normalized source labels found in the CSV */
@@ -127,10 +135,10 @@ export type ComputeResult = {
   };
 };
 
-export type LlmArchetypeLabel = {
-  name: string;
-  description: string;
-  items: string[];
+export type LlmMicroSegmentLabel = {
+  segment_name: string;
+  insight: string;
+  action: string;
 };
 
 export type LlmSummaryResult = {

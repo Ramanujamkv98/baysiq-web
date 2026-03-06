@@ -1,90 +1,118 @@
-diff --git a/src/lib/llm/prompts.ts b/src/lib/llm/prompts.ts
-index 7c6c90d994978f0b66f6c654d72dc598576af628..36776314f63c11111da52b729d38803a0f673c1d 100644
---- a/src/lib/llm/prompts.ts
-+++ b/src/lib/llm/prompts.ts
-@@ -1,60 +1,60 @@
--import type { Archetype } from "../types";
--import type { LlmSummaryResult } from "../types";
+diff --git a/src/lib/types.ts b/src/lib/types.ts
+index 272cdac4fee88e61b8e290a39b89596725ba1df4..a262616955bf9e4093d78c2d9a28458ebcc6f2b2 100644
+--- a/src/lib/types.ts
++++ b/src/lib/types.ts
+@@ -58,82 +58,90 @@ export type OrderRow = {
+   /** CAC applied only on first valid order row for the customer */
+   acquisition_cost: number;
+ 
+   /** Whether this row had an actual refund value > 0 */
+   is_true_refund: boolean;
+ 
+   order_month: string; // YYYY-MM
+   cohort_month: string; // YYYY-MM (customer first order month)
+   month_index: number; // 0, 1, 2, ...
+ };
+ 
+ export type CohortRetentionCell = {
+   cohortMonth: string;
+   monthIndex: number;
+   retentionPct: number;
+   activeCustomers: number;
+   cohortSize: number;
+ };
+ 
+ export type CohortProfitLtvRow = {
+   cohortMonth: string;
+   cohortSize: number;
+   profitLtv: number;
+ };
+ 
+-/**
+- * Archetype = customer product behavior pattern
+- * Step 1: product sets discovered within first 30 days
+- * Later steps may add LTV metrics and AI labeling
+- */
+-export type Archetype = {
+-  /** Stable identifier for React keys + later caching */
+-  key: string;
 -
--export const ARCHETYPES_SYSTEM = `You are a data analyst for e-commerce growth teams.
--Use only the provided input data; do not invent products, channels, or metrics.
--Return a JSON object with a single key "archetypes" which is an array of objects.
--Each object must have:
--- "name": short human-friendly segment label
--- "description": one sentence, concrete and data-grounded
--- "items": array of product names in the exact same order as the input archetype
--Return only valid JSON, no markdown.`;
+-  /** Products involved in the archetype */
+-  items: string[];
 -
--export function archetypesUserPrompt(patterns: Archetype[]): string {
--  const list = patterns.map((p) => ({
--    items: p.items,
--    customers: p.customers,
--    profitLtv: p.profitLtv,
-+import type { LlmSummaryResult, MicroSegment } from "../types";
-+
-+export const MICRO_SEGMENTS_SYSTEM = `You are a data analyst for e-commerce growth teams.
-+Use only the provided input data; do not compute metrics.
-+Return a JSON object with key "segments" as an array.
-+Each object must include:
-+- "segment_name": short segment label
-+- "insight": max 20 words
-+- "action": max 15 words
-+Return valid JSON only.`;
-+
-+export function microSegmentsUserPrompt(segments: MicroSegment[]): string {
-+  const list = segments.map((segment) => ({
-+    customers: segment.customers,
-+    profit_ltv: segment.profit_ltv,
-+    avg_cac: segment.avg_cac,
-+    ltv_cac_ratio: segment.ltv_cac_ratio,
-+    key_products: segment.key_products,
-   }));
+-  /** Number of unique customers exhibiting this pattern */
++export type FirstProductAffinity = {
++  first_product: string;
+   customers: number;
++  avg_profit_ltv: number;
++  avg_cac: number;
++  ltv_cac_ratio: number;
++  top_acquisition_channel: string;
++};
  
--    return `Label these archetypes with a name and description.\nRules:\n- Keep labels concise (2-4 words).\n- Descriptions should reference the pattern implied by item mix and customer count.\n- Do not add or remove items.\nReturn JSON: {"archetypes": [{"name": "...", "description": "...", "items": [...]}, ...]}\n\nInput:\n${JSON.stringify(list, null, 2)}`;
-+  return `Generate one label + insight + action per segment.\nRules:\n- insight <= 20 words\n- action <= 15 words\n- no metric calculations\n- JSON only\n\nInput:\n${JSON.stringify(list, null, 2)}`;
- }
+-  /** Average profit LTV across customers in this archetype */
+-  profitLtv?: number;
++export type ProductCombination = {
++  product_combination: string;
++  key_products: string[];
++  customers: number;
++  avg_profit_ltv: number;
++  avg_cac: number;
++  ltv_cac_ratio: number;
++};
  
--
- export const SUMMARY_SYSTEM = `You are a senior data analyst.
- Use only the provided metrics and avoid speculation.
- Given a tab name and key metrics, return a JSON object with two keys:
- - "bullets": array of 3-5 short insight bullets
- - "recommendation": one short action-oriented recommendation sentence
- If a metric is missing, skip it instead of guessing.
- Return only valid JSON, no markdown.`;
+-  /** Step 3+ LLM labeling */
+-  name?: string;
+-  description?: string;
++export type MicroSegment = {
++  key_products: string[];
++  customers: number;
++  profit_ltv: number;
++  avg_cac: number;
++  ltv_cac_ratio: number;
++  segment_name?: string;
++  insight?: string;
++  action?: string;
+ };
  
- export function summaryUserPrompt(tab: string, metrics: Record<string, unknown>): string {
-   return `Tab: ${tab}\nMetrics summary:\n${JSON.stringify(metrics, null, 2)}\n\nPrioritize:\n1) trends and outliers\n2) efficiency/profit implications\n3) one practical next action\n\nReturn JSON: {"bullets": ["...", ...], "recommendation": "..."}`;
- }
+ export type ComputeResult = {
+   kpis: {
+     customers: number;
+     orders: number;
+     revenue: number;
+     profit: number;
+     repeatPurchaseRate: number; // 0–100
+   };
  
--export function parseArchetypesResponse(content: string): Array<{ name: string; description: string; items: string[] }> | null {
-+export function parseMicroSegmentsResponse(content: string): Array<{ segment_name: string; insight: string; action: string }> | null {
-   try {
--    const raw = JSON.parse(content) as { archetypes?: Array<{ name?: string; description?: string; items?: string[] }> };
--    const list = raw?.archetypes;
-+    const raw = JSON.parse(content) as { segments?: Array<{ segment_name?: string; insight?: string; action?: string }> };
-+    const list = raw?.segments;
-     if (!Array.isArray(list)) return null;
-     return list.map((a) => ({
--      name: typeof a.name === "string" ? a.name : "Archetype",
--      description: typeof a.description === "string" ? a.description : "",
--      items: Array.isArray(a.items) ? a.items.map(String) : [],
-+      segment_name: typeof a.segment_name === "string" ? a.segment_name : "Micro Segment",
-+      insight: typeof a.insight === "string" ? a.insight : "",
-+      action: typeof a.action === "string" ? a.action : "",
-     }));
-   } catch {
-     return null;
-   }
- }
+   cohortRetention: CohortRetentionCell[];
+   cohortProfitLtv: CohortProfitLtvRow[];
+-  archetypes: Archetype[];
++  first_product_affinities: FirstProductAffinity[];
++  product_combinations: ProductCombination[];
++  micro_segments: MicroSegment[];
+   profitLtvByCohort: { cohortMonth: string; profitLtv: number }[];
  
- export function parseSummaryResponse(content: string): LlmSummaryResult | null {
-   try {
-     const raw = JSON.parse(content) as { bullets?: string[]; recommendation?: string };
-     const bullets = Array.isArray(raw?.bullets) ? raw.bullets.map(String) : [];
-     const recommendation = typeof raw?.recommendation === "string" ? raw.recommendation : "";
-     return { bullets, recommendation };
-   } catch {
-     return null;
-   }
- }
+   /** Distinct normalized source labels found in the CSV */
+   detectedSources: string[];
+ 
+   /** Small refund diagnostics for UI/debugging */
+   refundDiagnostics: {
+     rowsWithTrueRefunds: number;
+     rowsUsingRefundAssumption: number;
+   };
+ };
+ 
+-export type LlmArchetypeLabel = {
+-  name: string;
+-  description: string;
+-  items: string[];
++export type LlmMicroSegmentLabel = {
++  segment_name: string;
++  insight: string;
++  action: string;
+ };
+ 
+ export type LlmSummaryResult = {
+   bullets: string[];
+   recommendation: string;
+ };
