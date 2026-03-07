@@ -1,4 +1,4 @@
-order_id,customer_id,order_date,product_id,product_name,gross_revenue,discount,refund,utm_source,country
+export const SAMPLE_SHOPIFY_ORDERS_CSV = 'order_id,customer_id,order_date,product_id,product_name,gross_revenue,discount,refund,utm_source,country
 1243,C0133,2025-02-23,P006,Peptide Firming Moisturizer,48,5,0,organic,Australia
 1248,C0134,2025-04-12,P008,AHA + BHA Glow Toner,29,5,0,organic,Australia
 1042,C0023,2025-01-20,P002,2% Salicylic Acid Exfoliant,32,0,32,meta,UK
@@ -706,4 +706,4 @@ order_id,customer_id,order_date,product_id,product_name,gross_revenue,discount,r
 1682,C0387,2025-02-28,P009,SPF 50 Mineral Sunscreen,34,5,34,meta,Australia
 1463,C0263,2025-01-14,P002,2% Salicylic Acid Exfoliant,32,5,0,meta,UK
 1348,C0194,2025-03-19,P005,Retinol Renewal Night Cream,42,0,0,meta,USA
-1645,C0366,2025-05-01,P003,Hyaluronic Acid Hydration Serum,30,0,30,meta,Canada
+1645,C0366,2025-05-01,P003,Hyaluronic Acid Hydration Serum,30,0,30,meta,Canada`;
