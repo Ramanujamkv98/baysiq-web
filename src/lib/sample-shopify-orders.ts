@@ -706,4 +706,4 @@ export const SAMPLE_SHOPIFY_ORDERS_CSV = 'order_id,customer_id,order_date,produc
 1682,C0387,2025-02-28,P009,SPF 50 Mineral Sunscreen,34,5,34,meta,Australia
 1463,C0263,2025-01-14,P002,2% Salicylic Acid Exfoliant,32,5,0,meta,UK
 1348,C0194,2025-03-19,P005,Retinol Renewal Night Cream,42,0,0,meta,USA
-1645,C0366,2025-05-01,P003,Hyaluronic Acid Hydration Serum,30,0,30,meta,Canada`;
+1645,C0366,2025-05-01,P003,Hyaluronic Acid Hydration Serum,30,0,30,meta,Canada';
