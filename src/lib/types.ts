@@ -118,6 +118,11 @@ export type ComputeResult = {
     repeatPurchaseRate: number; // 0–100
   };
 
+  /** Overall average profit LTV per customer (total profit / customers). Use when cohort-level avg is 0 or misleading. */
+  overallAvgLtv?: number;
+  /** Overall LTV/CAC ratio (total profit / total CAC). undefined when total CAC is 0. */
+  overallLtvCacRatio?: number | null;
+
   cohortRetention: CohortRetentionCell[];
   cohortProfitLtv: CohortProfitLtvRow[];
   first_product_affinities: FirstProductAffinity[];
