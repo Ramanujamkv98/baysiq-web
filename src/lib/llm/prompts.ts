@@ -21,23 +21,50 @@ export function microSegmentsUserPrompt(segments: MicroSegment[]): string {
   return `Generate one label + insight + action per segment.\nRules:\n- insight <= 20 words\n- action <= 15 words\n- no metric calculations\n- JSON only\n\nInput:\n${JSON.stringify(list, null, 2)}`;
 }
 
-export const SUMMARY_SYSTEM = `You are a senior data analyst.
+export const SUMMARY_SYSTEM = `You are a senior e-commerce data analyst.
 Use only the provided metrics and avoid speculation.
 Given a tab name and key metrics, return a JSON object with two keys:
-- "bullets": array of 3-5 short insight bullets
-- "recommendation": one short action-oriented recommendation sentence
-If a metric is missing, skip it instead of guessing.
+- "bullets": array of 3-5 insight bullets
+- "recommendation": one concise action-oriented recommendation sentence
+
+Rules for bullets:
+- Write explanatory bullets, not just restated values.
+- Include what each important metric implies for profitability or growth when possible.
+- If relevant definitions are provided in metrics (for example, productCombinationDefinition), explicitly use them in plain language.
+- Prefer concrete entities from the input (product names, channels, top rows) over generic statements.
+- If a metric is missing, skip it instead of guessing.
+
 Return only valid JSON, no markdown.`;
 
 export function summaryUserPrompt(tab: string, metrics: Record<string, unknown>): string {
-  return `Tab: ${tab}\nMetrics summary:\n${JSON.stringify(metrics, null, 2)}\n\nPrioritize:\n1) trends and outliers\n2) efficiency/profit implications\n3) one practical next action\n\nReturn JSON: {"bullets": ["...", ...], "recommendation": "..."}`;
+  return `Tab: ${tab}
+Metrics summary:
+${JSON.stringify(metrics, null, 2)}
+
+Prioritize:
+1) explain what the output means, not just what it is
+2) trends and outliers
+3) efficiency/profit implications
+4) one practical next action
+
+If tab is archetypes:
+- explain top first-product affinities using the provided top rows
+- explain top product combinations and define what "product combination" means using the provided definition
+- discuss profit LTV using the top affinity rows rather than cohort-level averages
+
+Return JSON: {"bullets": ["...", ...], "recommendation": "..."}`;
 }
 
-export function parseMicroSegmentsResponse(content: string): Array<{ segment_name: string; insight: string; action: string }> | null {
+export function parseMicroSegmentsResponse(
+  content: string
+): Array<{ segment_name: string; insight: string; action: string }> | null {
   try {
-    const raw = JSON.parse(content) as { segments?: Array<{ segment_name?: string; insight?: string; action?: string }> };
+    const raw = JSON.parse(content) as {
+      segments?: Array<{ segment_name?: string; insight?: string; action?: string }>;
+    };
     const list = raw?.segments;
     if (!Array.isArray(list)) return null;
+
     return list.map((a) => ({
       segment_name: typeof a.segment_name === "string" ? a.segment_name : "Micro Segment",
       insight: typeof a.insight === "string" ? a.insight : "",
