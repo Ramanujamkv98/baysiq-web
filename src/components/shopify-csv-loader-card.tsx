@@ -1,0 +1,205 @@
+"use client";
+
+import { useCallback, useMemo, useState } from "react";
+import { motion } from "framer-motion";
+import { Download, FileSpreadsheet, FlaskConical, Upload } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { REQUIRED_CSV_COLUMNS } from "@/lib/types";
+import { SAMPLE_SHOPIFY_ORDERS_CSV } from "@/lib/sample-shopify-orders";
+import { cn } from "@/lib/utils";
+
+type ShopifyCsvLoaderCardProps = {
+  csvText: string;
+  onCsvChange: (text: string) => void;
+  disabled?: boolean;
+};
+
+function parseCsvHeader(csvText: string): string[] {
+  const firstLine = csvText.split(/\r?\n/).find((line) => line.trim().length > 0) ?? "";
+  return firstLine
+    .split(",")
+    .map((column) => column.trim().replace(/^"|"$/g, "").toLowerCase());
+}
+
+export function ShopifyCsvLoaderCard({ csvText, onCsvChange, disabled }: ShopifyCsvLoaderCardProps) {
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const missingColumns = useMemo(() => {
+    if (!csvText.trim()) return [];
+    const headers = parseCsvHeader(csvText);
+    return REQUIRED_CSV_COLUMNS.filter((requiredColumn) => !headers.includes(requiredColumn));
+  }, [csvText]);
+
+  const rowCount = useMemo(
+    () => Math.max(csvText.split(/\r?\n/).filter(Boolean).length - 1, 0),
+    [csvText]
+  );
+
+  const applyCsv = useCallback(
+    (nextCsvText: string, source: "upload" | "demo") => {
+      const headers = parseCsvHeader(nextCsvText);
+      const missing = REQUIRED_CSV_COLUMNS.filter((requiredColumn) => !headers.includes(requiredColumn));
+
+      if (missing.length > 0) {
+        setUploadError(`Missing required columns: ${missing.join(", ")}`);
+        return;
+      }
+
+      setUploadError(null);
+      onCsvChange(nextCsvText);
+
+      if (source === "demo") {
+        setIsDragOver(false);
+      }
+    },
+    [onCsvChange]
+  );
+
+  const handleFile = useCallback(
+    (file: File | null) => {
+      if (!file || disabled) return;
+
+      if (!file.name.toLowerCase().endsWith(".csv")) {
+        setUploadError("Please upload a .csv file.");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = typeof reader.result === "string" ? reader.result : "";
+        applyCsv(text, "upload");
+      };
+      reader.readAsText(file);
+    },
+    [applyCsv, disabled]
+  );
+
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragOver(false);
+      const file = e.dataTransfer.files[0];
+      handleFile(file || null);
+    },
+    [handleFile]
+  );
+
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+
+  const onDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  }, []);
+
+  const onBrowse = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      handleFile(file || null);
+      e.target.value = "";
+    },
+    [handleFile]
+  );
+
+  const onDownloadSample = useCallback(() => {
+    const blob = new Blob([SAMPLE_SHOPIFY_ORDERS_CSV], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "sample-shopify-orders.csv");
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const onLoadDemoData = useCallback(() => {
+    applyCsv(SAMPLE_SHOPIFY_ORDERS_CSV, "demo");
+  }, [applyCsv]);
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+      <Card className={cn("overflow-hidden", isDragOver && "ring-2 ring-primary") }>
+        <CardHeader className="space-y-3">
+          <CardTitle className="flex items-center gap-2">
+            <Upload className="h-5 w-5" />
+            Shopify orders CSV
+          </CardTitle>
+          <CardDescription>
+            Upload your export, use sample data, or instantly load a demo dataset to explore analytics.
+          </CardDescription>
+
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={onDownloadSample} disabled={disabled}>
+              <Download className="mr-2 h-4 w-4" />
+              Download sample CSV
+            </Button>
+            <Button type="button" variant="secondary" onClick={onLoadDemoData} disabled={disabled}>
+              <FlaskConical className="mr-2 h-4 w-4" />
+              Load demo dataset
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          <div
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            className={cn(
+              "rounded-lg border-2 border-dashed p-6 text-center transition-colors",
+              isDragOver ? "border-primary bg-primary/5" : "border-muted-foreground/25 bg-muted/30",
+              disabled && "pointer-events-none opacity-60"
+            )}
+          >
+            <input type="file" accept=".csv" onChange={onBrowse} className="hidden" id="shopify-csv-upload" />
+
+            {csvText ? (
+              <div className="flex flex-col items-center gap-2">
+                <FileSpreadsheet className="h-10 w-10 text-primary" />
+                <p className="text-sm font-medium">{rowCount} order rows loaded</p>
+                <label
+                  htmlFor="shopify-csv-upload"
+                  className="text-sm text-muted-foreground underline cursor-pointer hover:text-foreground"
+                >
+                  Replace file
+                </label>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground mb-2">Drag & drop your CSV here, or</p>
+                <label
+                  htmlFor="shopify-csv-upload"
+                  className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 cursor-pointer"
+                >
+                  Upload CSV
+                </label>
+              </>
+            )}
+          </div>
+
+          <div className="rounded-md border bg-muted/20 p-3">
+            <p className="text-xs font-medium text-muted-foreground">Required columns</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              {REQUIRED_CSV_COLUMNS.join(", ")}
+            </p>
+          </div>
+
+          {uploadError ? <p className="text-sm text-destructive">{uploadError}</p> : null}
+
+          {csvText && missingColumns.length > 0 ? (
+            <p className="text-sm text-destructive">CSV validation failed: missing {missingColumns.join(", ")}.</p>
+          ) : null}
+
+          {csvText && missingColumns.length === 0 && !uploadError ? (
+            <p className="text-sm text-emerald-600">CSV looks good. All required columns are present.</p>
+          ) : null}
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
