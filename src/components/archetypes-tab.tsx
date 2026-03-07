@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -71,15 +71,36 @@ export function ArchetypesTab({ data }: ArchetypesTabProps) {
     }
   };
 
-  const metrics = {
-    firstProductAffinities: data.first_product_affinities.length,
-    productCombinations: data.product_combinations.length,
-    microSegments: microSegments.length,
-  };
+  const metrics = useMemo(
+    () => ({
+      firstProductAffinitiesCount: data.first_product_affinities.length,
+      productCombinationsCount: data.product_combinations.length,
+      microSegmentsCount: microSegments.length,
+      productCombinationDefinition:
+        "A product combination is the grouped set of products repeatedly purchased together by the same customer (order sequence ignored).",
+      topFirstProductAffinities: data.first_product_affinities.slice(0, 5).map((row) => ({
+        firstProduct: row.first_product,
+        customers: row.customers,
+        profitLtv: row.avg_profit_ltv,
+        avgCac: row.avg_cac,
+        ltvCacRatio: row.ltv_cac_ratio,
+        topChannel: row.top_acquisition_channel,
+      })),
+      topProductCombinations: data.product_combinations.slice(0, 5).map((row) => ({
+        productCombination: row.product_combination,
+        keyProducts: row.key_products,
+        customers: row.customers,
+        profitLtv: row.avg_profit_ltv,
+        avgCac: row.avg_cac,
+        ltvCacRatio: row.ltv_cac_ratio,
+      })),
+    }),
+    [data.first_product_affinities, data.product_combinations, microSegments.length]
+  );
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-      <TabSummaryCard tab="Insights" metrics={metrics} />
+      <TabSummaryCard tab="archetypes" metrics={metrics} />
 
       <Card>
         <CardHeader>
