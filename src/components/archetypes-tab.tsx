@@ -12,6 +12,12 @@ type ArchetypesTabProps = {
   data: ComputeResult;
 };
 
+type LabeledSegment = {
+  segment_name: string;
+  insight: string;
+  action: string;
+};
+
 function formatCurrency(value: number) {
   return `$${value.toFixed(2)}`;
 }
@@ -21,9 +27,9 @@ function formatRatio(value: number) {
 }
 
 export function ArchetypesTab({ data }: ArchetypesTabProps) {
-  const [microSegments, setMicroSegments] = useState<MicroSegment[]>(data.micro_segments);
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [microSegments, setMicroSegments] = useState<MicroSegment[]>(data.micro_segments);
 
   useEffect(() => {
     setMicroSegments(data.micro_segments);
@@ -31,6 +37,7 @@ export function ArchetypesTab({ data }: ArchetypesTabProps) {
 
   const handleLabelWithAi = async () => {
     setLoading(true);
+
     try {
       const res = await fetch("/api/llm/archetypes", {
         method: "POST",
@@ -39,6 +46,7 @@ export function ArchetypesTab({ data }: ArchetypesTabProps) {
       });
 
       const json = await res.json();
+
       if (!res.ok) {
         toast({
           title: "Error",
@@ -48,17 +56,22 @@ export function ArchetypesTab({ data }: ArchetypesTabProps) {
         return;
       }
 
-      const labeled = json.segments as Array<{ segment_name: string; insight: string; action: string }>;
+      const labeled = json.segments as LabeledSegment[];
+
       if (Array.isArray(labeled)) {
         setMicroSegments((prev) =>
-          prev.map((segment, i) => ({
+          prev.map((segment, index) => ({
             ...segment,
-            segment_name: labeled[i]?.segment_name ?? segment.segment_name,
-            insight: labeled[i]?.insight ?? segment.insight,
-            action: labeled[i]?.action ?? segment.action,
+            segment_name: labeled[index]?.segment_name ?? segment.segment_name,
+            insight: labeled[index]?.insight ?? segment.insight,
+            action: labeled[index]?.action ?? segment.action,
           }))
         );
-        toast({ title: "Done", description: "Micro segments enriched with AI labels." });
+
+        toast({
+          title: "Done",
+          description: "Micro segments enriched with AI labels.",
+        });
       }
     } catch (error) {
       toast({
@@ -71,14 +84,9 @@ export function ArchetypesTab({ data }: ArchetypesTabProps) {
     }
   };
 
-  const metrics = useMemo(
-    () => ({
-      firstProductAffinitiesCount: data.first_product_affinities.length,
-      productCombinationsCount: data.product_combinations.length,
-      microSegmentsCount: microSegments.length,
-      productCombinationDefinition:
-        "A product combination is the grouped set of products repeatedly purchased together by the same customer (order sequence ignored).",
-      topFirstProductAffinities: data.first_product_affinities.slice(0, 5).map((row) => ({
+  const topFirstProductAffinities = useMemo(
+    () =>
+      data.first_product_affinities.slice(0, 5).map((row) => ({
         firstProduct: row.first_product,
         customers: row.customers,
         profitLtv: row.avg_profit_ltv,
@@ -86,7 +94,12 @@ export function ArchetypesTab({ data }: ArchetypesTabProps) {
         ltvCacRatio: row.ltv_cac_ratio,
         topChannel: row.top_acquisition_channel,
       })),
-      topProductCombinations: data.product_combinations.slice(0, 5).map((row) => ({
+    [data.first_product_affinities]
+  );
+
+  const topProductCombinations = useMemo(
+    () =>
+      data.product_combinations.slice(0, 5).map((row) => ({
         productCombination: row.product_combination,
         keyProducts: row.key_products,
         customers: row.customers,
@@ -94,8 +107,26 @@ export function ArchetypesTab({ data }: ArchetypesTabProps) {
         avgCac: row.avg_cac,
         ltvCacRatio: row.ltv_cac_ratio,
       })),
+    [data.product_combinations]
+  );
+
+  const metrics = useMemo(
+    () => ({
+      firstProductAffinitiesCount: data.first_product_affinities.length,
+      productCombinationsCount: data.product_combinations.length,
+      microSegmentsCount: microSegments.length,
+      productCombinationDefinition:
+        "A product combination is the grouped set of products repeatedly purchased together by the same customer (order sequence ignored).",
+      topFirstProductAffinities,
+      topProductCombinations,
     }),
-    [data.first_product_affinities, data.product_combinations, microSegments.length]
+    [
+      data.first_product_affinities.length,
+      data.product_combinations.length,
+      microSegments.length,
+      topFirstProductAffinities,
+      topProductCombinations,
+    ]
   );
 
   return (
@@ -109,7 +140,7 @@ export function ArchetypesTab({ data }: ArchetypesTabProps) {
         <CardContent>
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left border-b">
+              <tr className="border-b text-left">
                 <th>First Product</th>
                 <th>Customers</th>
                 <th>Profit LTV</th>
@@ -141,7 +172,7 @@ export function ArchetypesTab({ data }: ArchetypesTabProps) {
         <CardContent>
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left border-b">
+              <tr className="border-b text-left">
                 <th>Product Combination</th>
                 <th>Customers</th>
                 <th>Profit LTV</th>
@@ -179,7 +210,7 @@ export function ArchetypesTab({ data }: ArchetypesTabProps) {
         <CardContent>
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left border-b">
+              <tr className="border-b text-left">
                 <th>Segment</th>
                 <th>Customers</th>
                 <th>Profit LTV</th>
