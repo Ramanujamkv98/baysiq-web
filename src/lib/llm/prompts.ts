@@ -1,5 +1,11 @@
 import type { LlmSummaryResult, MicroSegment } from "../types";
 
+type MicroSegmentLabel = {
+  segment_name: string;
+  insight: string;
+  action: string;
+};
+
 export const MICRO_SEGMENTS_SYSTEM = `You are a data analyst for e-commerce growth teams.
 Use only the provided input data; do not compute metrics.
 Return a JSON object with key "segments" as an array.
@@ -18,7 +24,16 @@ export function microSegmentsUserPrompt(segments: MicroSegment[]): string {
     key_products: segment.key_products,
   }));
 
-  return `Generate one label + insight + action per segment.\nRules:\n- insight <= 20 words\n- action <= 15 words\n- no metric calculations\n- JSON only\n\nInput:\n${JSON.stringify(list, null, 2)}`;
+  return `Generate one label + insight + action per segment.
+
+Rules:
+- insight <= 20 words
+- action <= 15 words
+- no metric calculations
+- JSON only
+
+Input:
+${JSON.stringify(list, null, 2)}`;
 }
 
 export const SUMMARY_SYSTEM = `You are a senior e-commerce data analyst.
@@ -37,7 +52,9 @@ Rules for bullets:
 Return only valid JSON, no markdown.`;
 
 export function summaryUserPrompt(tab: string, metrics: Record<string, unknown>): string {
-  return `Tab: ${tab}
+  const normalizedTab = tab.trim().toLowerCase();
+
+  const basePrompt = `Tab: ${tab}
 Metrics summary:
 ${JSON.stringify(metrics, null, 2)}
 
@@ -45,30 +62,38 @@ Prioritize:
 1) explain what the output means, not just what it is
 2) trends and outliers
 3) efficiency/profit implications
-4) one practical next action
+4) one practical next action`;
+
+  const archetypesGuidance =
+    normalizedTab === "archetypes"
+      ? `
 
 If tab is archetypes:
 - explain top first-product affinities using the provided top rows
 - explain top product combinations and define what "product combination" means using the provided definition
-- discuss profit LTV using the top affinity rows rather than cohort-level averages
+- discuss profit LTV using the top affinity rows rather than cohort-level averages`
+      : "";
+
+  return `${basePrompt}${archetypesGuidance}
 
 Return JSON: {"bullets": ["...", ...], "recommendation": "..."}`;
 }
 
-export function parseMicroSegmentsResponse(
-  content: string
-): Array<{ segment_name: string; insight: string; action: string }> | null {
+export function parseMicroSegmentsResponse(content: string): MicroSegmentLabel[] | null {
   try {
     const raw = JSON.parse(content) as {
-      segments?: Array<{ segment_name?: string; insight?: string; action?: string }>;
+      segments?: Array<Partial<MicroSegmentLabel>>;
     };
-    const list = raw?.segments;
-    if (!Array.isArray(list)) return null;
 
-    return list.map((a) => ({
-      segment_name: typeof a.segment_name === "string" ? a.segment_name : "Micro Segment",
-      insight: typeof a.insight === "string" ? a.insight : "",
-      action: typeof a.action === "string" ? a.action : "",
+    if (!Array.isArray(raw?.segments)) return null;
+
+    return raw.segments.map((segment) => ({
+      segment_name:
+        typeof segment.segment_name === "string" && segment.segment_name.trim().length > 0
+          ? segment.segment_name
+          : "Micro Segment",
+      insight: typeof segment.insight === "string" ? segment.insight : "",
+      action: typeof segment.action === "string" ? segment.action : "",
     }));
   } catch {
     return null;
@@ -77,9 +102,18 @@ export function parseMicroSegmentsResponse(
 
 export function parseSummaryResponse(content: string): LlmSummaryResult | null {
   try {
-    const raw = JSON.parse(content) as { bullets?: string[]; recommendation?: string };
-    const bullets = Array.isArray(raw?.bullets) ? raw.bullets.map(String) : [];
-    const recommendation = typeof raw?.recommendation === "string" ? raw.recommendation : "";
+    const raw = JSON.parse(content) as {
+      bullets?: unknown;
+      recommendation?: unknown;
+    };
+
+    const bullets = Array.isArray(raw?.bullets)
+      ? raw.bullets.map((bullet) => String(bullet))
+      : [];
+
+    const recommendation =
+      typeof raw?.recommendation === "string" ? raw.recommendation : "";
+
     return { bullets, recommendation };
   } catch {
     return null;
