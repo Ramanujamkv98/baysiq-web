@@ -117,18 +117,26 @@ export function ArchetypesTab({ data }: ArchetypesTabProps) {
       microSegmentsCount: microSegments.length,
       productCombinationDefinition:
         "A product combination is the grouped set of products repeatedly purchased together by the same customer (order sequence ignored).",
-      topFirstProductAffinities,
-      topProductCombinations,
+      topFirstProductAffinities: data.first_product_affinities.slice(0, 5).map((row) => ({
+        firstProduct: row.first_product,
+        customers: row.customers,
+        profitLtv: row.avg_profit_ltv,
+        avgCac: row.avg_cac,
+        ltvCacRatio: row.ltv_cac_ratio,
+        topChannel: row.top_acquisition_channel,
+      })),
+      topProductCombinations: data.product_combinations.slice(0, 5).map((row) => ({
+        productCombination: row.product_combination,
+        keyProducts: row.key_products,
+        customers: row.customers,
+        profitLtv: row.avg_profit_ltv,
+        avgCac: row.avg_cac,
+        ltvCacRatio: row.ltv_cac_ratio,
+      })),
     }),
-    [
-      data.first_product_affinities.length,
-      data.product_combinations.length,
-      microSegments.length,
-      topFirstProductAffinities,
-      topProductCombinations,
-    ]
+    [data.first_product_affinities, data.product_combinations, microSegments.length]
   );
-
+  
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       <TabSummaryCard tab="archetypes" metrics={metrics} />
