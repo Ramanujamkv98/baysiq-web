@@ -133,9 +133,11 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: "Server misconfiguration." },
-      { status: 500 }
-    );
+      {
+        error:
+          "OpenAI API key is not configured. Set OPENAI_API_KEY to enable summary generation.",
+      },
+      { status: 503 }
   }
 
   try {
