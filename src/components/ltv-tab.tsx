@@ -20,7 +20,7 @@ type LtvTabProps = {
 };
 
 export function LtvTab({ data }: LtvTabProps) {
-  const { profitLtvByCohort } = data;
+  const { profitLtvByCohort, overallAvgLtv, overallLtvCacRatio } = data;
 
   const chartData = useMemo(
     () =>
@@ -35,11 +35,14 @@ export function LtvTab({ data }: LtvTabProps) {
     () => ({
       cohorts: profitLtvByCohort.length,
       avgLtv:
-        profitLtvByCohort.length > 0
-          ? profitLtvByCohort.reduce((s, r) => s + r.profitLtv, 0) / profitLtvByCohort.length
-          : 0,
+        overallAvgLtv != null
+          ? overallAvgLtv
+          : profitLtvByCohort.length > 0
+            ? profitLtvByCohort.reduce((s, r) => s + r.profitLtv, 0) / profitLtvByCohort.length
+            : 0,
+      ltvCacRatio: overallLtvCacRatio,
     }),
-    [profitLtvByCohort]
+    [profitLtvByCohort, overallAvgLtv, overallLtvCacRatio]
   );
 
   return (
@@ -49,6 +52,44 @@ export function LtvTab({ data }: LtvTabProps) {
       className="space-y-6"
     >
       <TabSummaryCard tab="LTV" metrics={metrics} />
+
+      {(overallAvgLtv != null || overallLtvCacRatio != null) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Overall LTV metrics</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Average profit LTV per customer and LTV/CAC (total profit ÷ total CAC). CAC is applied only to the first order per customer.
+            </p>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-6">
+            {overallAvgLtv != null && (
+              <div>
+                <p className="text-xs text-muted-foreground">Average LTV</p>
+                <p className="text-xl font-semibold">
+                  {new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: "USD",
+                    maximumFractionDigits: 0,
+                  }).format(overallAvgLtv)}
+                </p>
+              </div>
+            )}
+            <div>
+              <p className="text-xs text-muted-foreground">LTV/CAC ratio</p>
+              <p className="text-xl font-semibold">
+                {overallLtvCacRatio != null && overallLtvCacRatio > 0
+                  ? Number(overallLtvCacRatio).toFixed(2)
+                  : "N/A"}
+              </p>
+              {overallLtvCacRatio == null && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Enter CAC by source in Cost inputs to see ratio.
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

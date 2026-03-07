@@ -203,6 +203,14 @@ export function compute(input: ComputeInput): ComputeResult | { error: string } 
   const revenue = orderRows.reduce((s, o) => s + o.net_revenue, 0);
   const profit = orderRows.reduce((s, o) => s + o.order_profit, 0);
 
+  const totalCac = orderRows.reduce((s, o) => s + o.acquisition_cost, 0);
+  const overallAvgLtv = customers > 0 ? profit / customers : 0;
+  const overallLtvCacRatio = totalCac > 0 ? safeRatio(profit, totalCac) : null;
+
+  // Optional debug logging (uncomment to trace LTV/CAC issues):
+  // console.debug("[compute] orderRows:", orderRows.length, "customers:", customers, "revenue:", revenue, "profit:", profit, "totalCac:", totalCac, "overallAvgLtv:", overallAvgLtv, "overallLtvCacRatio:", overallLtvCacRatio);
+  // if (orderRows.length > 0) console.debug("[compute] first row gross_revenue:", orderRows[0]?.gross_revenue, "net_revenue:", orderRows[0]?.net_revenue, "order_profit:", orderRows[0]?.order_profit);
+
   // Repeat purchase rate by unique order_id per customer
   const ordersByCustomer = new Map<string, Set<string>>();
   for (const o of orderRows) {
@@ -300,6 +308,8 @@ export function compute(input: ComputeInput): ComputeResult | { error: string } 
       profit,
       repeatPurchaseRate,
     },
+    overallAvgLtv,
+    overallLtvCacRatio,
     cohortRetention,
     cohortProfitLtv,
     first_product_affinities: insights.first_product_affinities,
