@@ -61,13 +61,13 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 type SummaryRequestBody = {
-  tab: string; // normalized to "cohorts" | "archetypes" | "ltv"
+  tab: string;
   metrics: Record<string, unknown>;
 };
 
-function validateBody(body: unknown):
-  | { ok: true; value: SummaryRequestBody }
-  | { ok: false; error: string } {
+function validateBody(
+  body: unknown
+): { ok: true; value: SummaryRequestBody } | { ok: false; error: string } {
   if (!isPlainObject(body)) {
     return {
       ok: false,
@@ -85,7 +85,6 @@ function validateBody(body: unknown):
     };
   }
 
-  // ✅ Normalize to make the API resilient (e.g., "Cohorts" -> "cohorts")
   const tab = rawTab.trim().toLowerCase();
 
   if (!ALLOWED_TABS.has(tab)) {
@@ -105,7 +104,7 @@ function validateBody(body: unknown):
   return {
     ok: true,
     value: {
-      tab, // ✅ return normalized tab
+      tab,
       metrics: isPlainObject(metrics) ? metrics : {},
     },
   };
@@ -138,6 +137,7 @@ export async function POST(request: NextRequest) {
           "OpenAI API key is not configured. Set OPENAI_API_KEY to enable summary generation.",
       },
       { status: 503 }
+    );
   }
 
   try {
