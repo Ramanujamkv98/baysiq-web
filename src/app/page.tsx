@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
-import { UploadCard } from "@/components/upload-card";
+import { ShopifyCsvLoaderCard } from "@/components/shopify-csv-loader-card";
 import { CostInputsCard } from "@/components/cost-inputs-card";
 import { ResultsCard } from "@/components/results-card";
 import { Button } from "@/components/ui/button";
@@ -288,7 +288,7 @@ export default function Home() {
           </motion.header>
 
           <div className="grid md:grid-cols-2 gap-6">
-            <UploadCard csvText={csvText} onCsvChange={setCsvText} />
+            <ShopifyCsvLoaderCard csvText={csvText} onCsvChange={setCsvText} />
             <CostInputsCard
               csvText={csvText}
               costs={costs}

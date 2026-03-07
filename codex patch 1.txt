@@ -1,36 +1,80 @@
-diff --git a/sample-orders.csv b/sample-orders.csv
-index 36950ce7b691779843e93e5e9066eb5c470b0c47..ae526ebb83bd11d483010519c1c0a3770f5bfffd 100644
---- a/sample-orders.csv
-+++ b/sample-orders.csv
-@@ -1,11 +1,21 @@
- order_id,customer_id,order_date,product_id,product_name,gross_revenue,discount,refund,utm_source,country
--ord-1,cust-A,2024-01-05,prod-1,Widget A,100,5,0,google,US
--ord-2,cust-A,2024-02-10,prod-2,Widget B,80,0,0,google,US
--ord-3,cust-B,2024-01-15,prod-1,Widget A,100,10,0,facebook,CA
--ord-4,cust-B,2024-02-20,prod-2,Widget B,80,0,0,facebook,CA
--ord-5,cust-C,2024-02-01,prod-1,Widget A,100,0,0,organic,US
--ord-6,cust-D,2024-01-20,prod-2,Widget B,80,8,0,google,UK
--ord-7,cust-D,2024-03-01,prod-1,Widget A,100,0,0,google,UK
--ord-8,cust-E,2024-02-15,prod-3,Gadget C,120,0,0,organic,US
--ord-9,cust-F,2024-01-10,prod-1,Widget A,100,0,0,google,US
--ord-10,cust-F,2024-02-25,prod-3,Gadget C,120,12,0,google,US
-+ord-1001,cust-001,2024-01-03,prod-tee-01,Core Tee,45,0,0,google,US
-+ord-1002,cust-002,2024-01-04,prod-hood-02,Cloud Hoodie,89,10,0,meta,CA
-+ord-1003,cust-003,2024-01-08,prod-cap-03,Everyday Cap,29,0,0,organic,US
-+ord-1004,cust-001,2024-02-01,prod-bag-04,Utility Tote,55,5,0,email,US
-+ord-1005,cust-004,2024-02-03,prod-tee-01,Core Tee,45,0,0,tiktok,UK
-+ord-1006,cust-005,2024-02-05,prod-bottle-05,Hydro Bottle,38,0,0,google,AU
-+ord-1007,cust-002,2024-02-11,prod-sock-06,Performance Socks,22,2,0,meta,CA
-+ord-1008,cust-006,2024-02-13,prod-hood-02,Cloud Hoodie,89,0,0,affiliate,US
-+ord-1009,cust-007,2024-02-17,prod-tee-01,Core Tee,45,5,0,google,US
-+ord-1010,cust-008,2024-02-20,prod-cap-03,Everyday Cap,29,0,0,organic,DE
-+ord-1011,cust-009,2024-03-02,prod-bag-04,Utility Tote,55,0,0,email,US
-+ord-1012,cust-003,2024-03-06,prod-sock-06,Performance Socks,22,0,0,organic,US
-+ord-1013,cust-010,2024-03-09,prod-hood-02,Cloud Hoodie,89,15,0,meta,GB
-+ord-1014,cust-011,2024-03-11,prod-bottle-05,Hydro Bottle,38,0,0,google,US
-+ord-1015,cust-012,2024-03-14,prod-tee-01,Core Tee,45,0,0,reddit,US
-+ord-1016,cust-006,2024-03-18,prod-cap-03,Everyday Cap,29,0,8,affiliate,US
-+ord-1017,cust-004,2024-03-19,prod-bag-04,Utility Tote,55,0,0,tiktok,UK
-+ord-1018,cust-013,2024-03-22,prod-hood-02,Cloud Hoodie,89,9,0,google,CA
-+ord-1019,cust-014,2024-03-25,prod-bottle-05,Hydro Bottle,38,0,0,organic,US
-+ord-1020,cust-015,2024-03-28,prod-tee-01,Core Tee,45,0,0,email,NZ
+diff --git a/src/app/page.tsx b/src/app/page.tsx
+index 5ade39e070728207ab3b7b6175c3c563574a6b5d..04f8cbd83ab22a974b737675cfaeb817a320da3e 100644
+--- a/src/app/page.tsx
++++ b/src/app/page.tsx
+@@ -1,31 +1,31 @@
+ "use client";
+ 
+ import { useState, useCallback } from "react";
+ import { motion } from "framer-motion";
+ import { useToast } from "@/hooks/use-toast";
+-import { UploadCard } from "@/components/upload-card";
++import { ShopifyCsvLoaderCard } from "@/components/shopify-csv-loader-card";
+ import { CostInputsCard } from "@/components/cost-inputs-card";
+ import { ResultsCard } from "@/components/results-card";
+ import { Button } from "@/components/ui/button";
+ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+ import type { CostInputs, ComputeResult } from "@/lib/types";
+ 
+ const defaultCosts: CostInputs = {
+   cogsPct: 0,
+   shippingPerOrder: 0,
+   paymentProcessingPct: 0,
+   fixedTransactionFee: 0,
+   defaultRefundRatePct: 0,
+   cacBySource: {},
+ };
+ 
+ export default function Home() {
+   const [csvText, setCsvText] = useState("");
+   const [costs, setCosts] = useState<CostInputs>(defaultCosts);
+   const [result, setResult] = useState<ComputeResult | null>(null);
+   const [loading, setLoading] = useState(false);
+   const { toast } = useToast();
+ 
+   const scrollToApp = useCallback(() => {
+     document.getElementById("app")?.scrollIntoView({ behavior: "smooth" });
+   }, []);
+@@ -266,41 +266,41 @@ export default function Home() {
+               <p className="font-medium">What does “profit LTV” mean?</p>
+               <p className="text-muted-foreground">
+                 Lifetime value after subtracting discounts, refunds, COGS, shipping, payment fees,
+                 and acquisition cost.
+               </p>
+             </div>
+           </div>
+         </section>
+ 
+         {/* APP */}
+         <section id="app" className="space-y-8 scroll-mt-24">
+           <motion.header
+             initial={{ opacity: 0, y: -6 }}
+             animate={{ opacity: 1, y: 0 }}
+             className="text-center space-y-2"
+           >
+             <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+               Try it on your CSV
+             </h2>
+             <p className="text-muted-foreground">
+               Upload orders → add CAC + costs → compute cohorts → archetypes → profit LTV.
+             </p>
+           </motion.header>
+ 
+           <div className="grid md:grid-cols-2 gap-6">
+-            <UploadCard csvText={csvText} onCsvChange={setCsvText} />
++            <ShopifyCsvLoaderCard csvText={csvText} onCsvChange={setCsvText} />
+             <CostInputsCard
+               csvText={csvText}
+               costs={costs}
+               onCostsChange={setCosts}
+               onUpdateResults={updateResults}
+               loading={loading}
+             />
+           </div>
+ 
+           <ResultsCard data={result} loading={loading} />
+         </section>
+       </div>
+     </main>
+   );
+ }
